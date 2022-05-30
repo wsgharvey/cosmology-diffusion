@@ -11,6 +11,12 @@ pip install --upgrade torch torchvision  #  this should install the `improved_di
 pip install -e .
 ```
 
+This repo logs to wandb, using the wandb entity/username and project name set by:
+```
+export WANDB_ENTITY=<...>
+export WANDB_PROJECT=<...>
+```
+
 ## Preparing Data
 I only tested using CIFAR-10, preparing data with
 ```
