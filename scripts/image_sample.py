@@ -10,7 +10,7 @@ import numpy as np
 import torch as th
 import torch.distributed as dist
 
-from improved_diffusion import dist_util, logger
+from improved_diffusion import dist_util
 from improved_diffusion.script_util import (
     NUM_CLASSES,
     model_and_diffusion_defaults,
@@ -24,9 +24,8 @@ def main():
     args = create_argparser().parse_args()
 
     dist_util.setup_dist()
-    logger.configure()
 
-    logger.log("creating model and diffusion...")
+    print("creating model and diffusion...")
     model, diffusion = create_model_and_diffusion(
         **args_to_dict(args, model_and_diffusion_defaults().keys())
     )
@@ -36,7 +35,7 @@ def main():
     model.to(dist_util.dev())
     model.eval()
 
-    logger.log("sampling...")
+    print("sampling...")
     all_images = []
     all_labels = []
     while len(all_images) * args.batch_size < args.num_samples:
@@ -68,7 +67,7 @@ def main():
             ]
             dist.all_gather(gathered_labels, classes)
             all_labels.extend([labels.cpu().numpy() for labels in gathered_labels])
-        logger.log(f"created {len(all_images) * args.batch_size} samples")
+        print(f"created {len(all_images) * args.batch_size} samples")
 
     arr = np.concatenate(all_images, axis=0)
     arr = arr[: args.num_samples]
@@ -77,15 +76,15 @@ def main():
         label_arr = label_arr[: args.num_samples]
     if dist.get_rank() == 0:
         shape_str = "x".join([str(x) for x in arr.shape])
-        out_path = os.path.join(logger.get_dir(), f"samples_{shape_str}.npz")
-        logger.log(f"saving to {out_path}")
+        out_path = os.path.join("TODO", f"samples_{shape_str}.npz")  # TODO
+        print(f"saving to {out_path}")
         if args.class_cond:
             np.savez(out_path, arr, label_arr)
         else:
             np.savez(out_path, arr)
 
     dist.barrier()
-    logger.log("sampling complete")
+    print("sampling complete")
 
 
 def create_argparser():
