@@ -1,6 +1,7 @@
 datasets/cifar_*
 wandb
 checkpoints
+results
 
 
 # Default Python .gitignore:

@@ -5,46 +5,29 @@ numpy array. This can be used to produce samples for FID evaluation.
 
 import argparse
 import os
+from tkinter import N
 
 import numpy as np
 import torch as th
-import torch.distributed as dist
 
-from improved_diffusion import dist_util
+from improved_diffusion import dist_util  # we do NOT support distributed sampling
 from improved_diffusion.script_util import (
     NUM_CLASSES,
     model_and_diffusion_defaults,
     create_model_and_diffusion,
     add_dict_to_argparser,
     args_to_dict,
+    str2bool,
 )
+from improved_diffusion.test_util import get_model_results_path
 
 
-def main():
-    args = create_argparser().parse_args()
-
-    dist_util.setup_dist()
-
-    print("creating model and diffusion...")
-    model, diffusion = create_model_and_diffusion(
-        **args_to_dict(args, model_and_diffusion_defaults().keys())
-    )
-    model.load_state_dict(
-        dist_util.load_state_dict(args.model_path, map_location="cpu")
-    )
-    model.to(dist_util.dev())
-    model.eval()
+def main(model, args):
 
     print("sampling...")
-    all_images = []
-    all_labels = []
-    while len(all_images) * args.batch_size < args.num_samples:
+    saved = 0
+    while saved < len(args.indices):
         model_kwargs = {}
-        if args.class_cond:
-            classes = th.randint(
-                low=0, high=NUM_CLASSES, size=(args.batch_size,), device=dist_util.dev()
-            )
-            model_kwargs["y"] = classes
         sample_fn = (
             diffusion.p_sample_loop if not args.use_ddim else diffusion.ddim_sample_loop
         )
@@ -58,48 +41,56 @@ def main():
         sample = sample.permute(0, 2, 3, 1)
         sample = sample.contiguous()
 
-        gathered_samples = [th.zeros_like(sample) for _ in range(dist.get_world_size())]
-        dist.all_gather(gathered_samples, sample)  # gather not supported with NCCL
-        all_images.extend([sample.cpu().numpy() for sample in gathered_samples])
-        if args.class_cond:
-            gathered_labels = [
-                th.zeros_like(classes) for _ in range(dist.get_world_size())
-            ]
-            dist.all_gather(gathered_labels, classes)
-            all_labels.extend([labels.cpu().numpy() for labels in gathered_labels])
-        print(f"created {len(all_images) * args.batch_size} samples")
+        for img in sample.cpu().numpy():
+            drange = [-1, 1]  # Range of the generated samples' pixel values
+            img = (img - drange[0]) / (drange[1] - drange[0])  * 255  # recon with pixel values in [0, 255]
+            img = img.astype(np.uint8)
+            fname = args.eval_dir / f"sample-{saved:06d}.npy"
+            np.save(fname, img)
+            saved += 1
 
-    arr = np.concatenate(all_images, axis=0)
-    arr = arr[: args.num_samples]
-    if args.class_cond:
-        label_arr = np.concatenate(all_labels, axis=0)
-        label_arr = label_arr[: args.num_samples]
-    if dist.get_rank() == 0:
-        shape_str = "x".join([str(x) for x in arr.shape])
-        out_path = os.path.join("TODO", f"samples_{shape_str}.npz")  # TODO
-        print(f"saving to {out_path}")
-        if args.class_cond:
-            np.savez(out_path, arr, label_arr)
-        else:
-            np.savez(out_path, arr)
-
-    dist.barrier()
     print("sampling complete")
 
 
-def create_argparser():
-    defaults = dict(
-        clip_denoised=True,
-        num_samples=10000,
-        batch_size=16,
-        use_ddim=False,
-        model_path="",
-    )
-    defaults.update(model_and_diffusion_defaults())
-    parser = argparse.ArgumentParser()
-    add_dict_to_argparser(parser, defaults)
-    return parser
-
-
 if __name__ == "__main__":
-    main()
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("checkpoint_path", type=str)
+    parser.add_argument("--batch_size", type=int, default=8)
+    parser.add_argument("--eval_dir", type=str, default=None)
+    parser.add_argument("--indices", type=int, nargs="*", default=None,
+                        help="If not None, only generate videos for the specified indices. Used for handling parallelization.")
+    parser.add_argument("--use_ddim", type=str2bool, default=False)
+    parser.add_argument("--timestep_respacing", type=str, default="")
+    parser.add_argument("--clip_denoised", type=str2bool, default=True)
+    parser.add_argument("--device", default="cuda" if th.cuda.is_available() else "cpu")
+    args = parser.parse_args()
+
+    # Prepare samples directory
+    args.eval_dir = get_model_results_path(args) / "samples"
+    args.eval_dir.mkdir(parents=True, exist_ok=True)
+
+    # Load the checkpoint (state dictionary and config)
+    data = dist_util.load_state_dict(args.checkpoint_path, map_location="cpu")
+    state_dict = data["state_dict"]
+    model_args = data["config"]
+    model_args.update({"use_ddim": args.use_ddim,
+                       "timestep_respacing": args.timestep_respacing})
+    model_args = argparse.Namespace(**model_args)
+    # Load the model
+    model, diffusion = create_model_and_diffusion(
+        **args_to_dict(model_args, model_and_diffusion_defaults().keys())
+    )
+    model.load_state_dict(state_dict)
+    model = model.to(args.device)
+    model.eval()
+    args.image_size = model_args.image_size
+
+    # Prepare which image indices to sample (for unconditional generation, index does nothing except change file name)
+    if args.indices is None:
+        assert "SLURM_ARRAY_TASK_ID" in os.environ
+        task_id = int(os.environ["SLURM_ARRAY_TASK_ID"])
+        args.indices = list(range(task_id * args.batch_size, (task_id + 1) * args.batch_size))
+        print(f"Only generating predictions for the batch #{task_id}.")
+
+    main(model, args)
