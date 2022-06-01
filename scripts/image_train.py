@@ -18,6 +18,7 @@ from improved_diffusion.script_util import (
     add_dict_to_argparser,
 )
 from improved_diffusion.train_util import TrainLoop
+from improved_diffusion.logger import logger
 
 os.environ["MY_WANDB_DIR"] = "none"
 if "--unobserve" in sys.argv:
@@ -42,7 +43,7 @@ def init_wandb(config, id):
         assert "SLURM_JOB_NUM_NODES" in os.environ
         num_nodes = int(os.environ['SLURM_JOB_NUM_NODES'])
         print(f"Node list: {os.environ['SLURM_JOB_NODELIST']}")
-    wandb.log({"num_nodes": num_nodes})
+    logger.logkv("num_nodes", num_nodes)
     print(f"Number of nodes: {num_nodes}") 
 
 
@@ -85,6 +86,7 @@ def main():
         schedule_sampler=schedule_sampler,
         weight_decay=args.weight_decay,
         lr_anneal_steps=args.lr_anneal_steps,
+        sample_interval=args.sample_interval,
         args=args,
     ).run_loop()
 
@@ -105,6 +107,7 @@ def create_argparser():
         use_fp16=False,
         fp16_scale_growth=1e-3,
         resume_id='',  # set this to a previous run's wandb id to resume training
+        sample_interval=50000,
     )
     defaults.update(model_and_diffusion_defaults())
     parser = argparse.ArgumentParser()

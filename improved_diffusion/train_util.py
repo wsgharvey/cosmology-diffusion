@@ -6,7 +6,9 @@ import wandb
 import blobfile as bf
 import glob
 from pathlib import Path
+from time import time
 import numpy as np
+from PIL import Image
 import torch as th
 import torch.distributed as dist
 from torch.nn.parallel.distributed import DistributedDataParallel as DDP
@@ -23,6 +25,7 @@ from .fp16_util import (
 )
 from .nn import update_ema
 from .resample import LossAwareSampler, UniformSampler
+from .rng_util import rng_decorator
 
 # For ImageNet experiments, this was a good default value.
 # We found that the lg_loss_scale quickly climbed to
@@ -44,12 +47,13 @@ class TrainLoop:
         log_interval,
         save_interval,
         resume_checkpoint,
-        use_fp16=False,
-        fp16_scale_growth=1e-3,
-        schedule_sampler=None,
-        weight_decay=0.0,
-        lr_anneal_steps=0,
-        args=None,
+        use_fp16,
+        fp16_scale_growth,
+        schedule_sampler,
+        weight_decay,
+        lr_anneal_steps,
+        sample_interval,
+        args,
     ):
         self.args = args
         if not args.resume_id:
@@ -73,6 +77,7 @@ class TrainLoop:
         self.schedule_sampler = schedule_sampler or UniformSampler(diffusion)
         self.weight_decay = weight_decay
         self.lr_anneal_steps = lr_anneal_steps
+        self.sample_interval = sample_interval
 
         self.step = 0
         self.global_batch = self.batch_size * dist.get_world_size()
@@ -166,6 +171,7 @@ class TrainLoop:
         self.model.convert_to_fp16()
 
     def run_loop(self):
+        last_sample_time = None
         while (
             not self.lr_anneal_steps
             or self.step < self.lr_anneal_steps
@@ -179,18 +185,25 @@ class TrainLoop:
                 # Run for a finite amount of time in integration tests.
                 if os.environ.get("DIFFUSION_TRAINING_TEST", "") and self.step > 0:
                     return
+            if self.sample_interval is not None and self.step != 0 and (self.step % self.sample_interval == 0 or self.step == 5):
+                if last_sample_time is not None:
+                    logger.logkv('timing/time_between_samples', time()-last_sample_time)
+                self.log_samples()
+                last_sample_time = time()
             self.step += 1
         # Save the last checkpoint if it wasn't already saved.
         if (self.step - 1) % self.save_interval != 0:
             self.save()
 
     def run_step(self, batch, cond):
+        t0 = time()
         self.forward_backward(batch, cond)
         if self.use_fp16:
             self.optimize_fp16()
         else:
             self.optimize_normal()
         self.log_step()
+        logger.logkv("timing/step_time", time() - t0)
 
     def forward_backward(self, batch, cond):
         zero_grad(self.model_params)
@@ -323,6 +336,33 @@ class TrainLoop:
             return params
 
 
+    @rng_decorator(seed=0)
+    def log_samples(self):
+        if dist.get_rank() == 0:
+            sample_start = time()
+            self.model.eval()
+            orig_state_dict = copy.deepcopy(self.model.state_dict())
+            self.model.load_state_dict(copy.deepcopy(self._master_params_to_state_dict(self.ema_params[0])))
+
+            print("sampling...")
+            samples = self.diffusion.p_sample_loop(
+                self.model,
+                (self.args.batch_size, self.args.image_channels, self.args.image_size, self.args.image_size),
+                clip_denoised=True,
+            )
+            all_samples = concat_images_with_padding(samples, pad_val=0)
+            rescaled = ((all_samples + 1) * 127.5).clamp(0, 255)
+            img = wandb.Image(Image.fromarray(rescaled.contiguous().cpu().numpy().astype(np.uint8).transpose(1, 2, 0)))
+            logger.logkv("samples/all", img, distributed=False)
+            logger.logkv("timing/sampling_time", time() - sample_start, distributed=False)
+
+            # restore model to original state
+            self.model.train()
+            self.model.load_state_dict(orig_state_dict)
+            print("finished sampling")
+        dist.barrier()
+
+
 def parse_resume_step_from_filename(filename):
     """
     Parse filenames of the form path/to/modelNNNNNN.pt, where NNNNNN is the
@@ -372,3 +412,20 @@ def log_loss_dict(diffusion, ts, losses):
         for sub_t, sub_loss in zip(ts.cpu().numpy(), values.detach().cpu().numpy()):
             quartile = int(4 * sub_t / diffusion.num_timesteps)
             logger.logkv_mean(f"{key}_q{quartile}", sub_loss)
+
+
+def concat_images_with_padding(images, horizontal=True,
+                               pad_dim=1, pad_val=0, pad_ends=False):
+    """Cocatenates a list (or batched tensor) of CxHxW images, with padding in
+    between, for pretty viewing.
+    """
+    _, h, w = images[0].shape
+    pad_h, pad_w = (h, pad_dim) if horizontal else (pad_dim, w)
+    padding = th.zeros_like(images[0][:, :pad_h, :pad_w]) + pad_val
+    images_with_padding = []
+    for image in images:
+        images_with_padding.extend([image, padding])
+    if pad_ends:
+        images_with_padding = [padding, *images_with_padding, padding]
+    images_with_padding = images_with_padding[:-1]   # remove final pad
+    return th.cat(images_with_padding, dim=2 if horizontal else 1)
