@@ -2,13 +2,14 @@ This is a fork of the codebase for [Improved Denoising Diffusion Probabilistic M
 
 # Usage
 
-Tested with Python 3.8.13 in a conda environment. Installed requirements with:
+Tested with Python 3.10.4 in a conda environment. Installed requirements with:
 ```
 # conda install pytorch torchvision -c pytorch  # I ran this line but it is probably unnecessary given that I reinstalled with pip
 conda install -c conda-forge mpi4py
 pip install wandb blobfile tqdm
 pip install --upgrade torch torchvision
 pip install -e .  # Run from inside this git repo. This installs the `improved_diffusion` python package that the scripts use
+pip install matplotlib
 ```
 
 This repo logs to wandb, using the wandb entity/username and project name set by:

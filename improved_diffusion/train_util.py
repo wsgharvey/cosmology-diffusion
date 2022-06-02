@@ -350,9 +350,12 @@ class TrainLoop:
                 (self.args.batch_size, self.args.image_channels, self.args.image_size, self.args.image_size),
                 clip_denoised=True,
             )
+            if self.args.image_channels == 2:
+                # convert back to just 1 channel in range [-1, ...]
+                samples = samples[:, 0:1] + (1 + samples[:, 1:2]) * (self.args.max_data_value - 1) / 2
             all_samples = concat_images_with_padding(samples, pad_val=0)
-            rescaled = ((all_samples + 1) * 127.5).clamp(0, 255)
-            img = wandb.Image(Image.fromarray(rescaled.contiguous().cpu().numpy().astype(np.uint8).transpose(1, 2, 0)))
+            rescaled = ((all_samples + 1) * 255/(1+self.args.max_data_value)).clamp(0, 255)
+            img = wandb.Image(Image.fromarray(rescaled.contiguous().cpu().numpy().astype(np.uint8).squeeze(axis=0)))
             logger.logkv("samples/all", img, distributed=False)
             logger.logkv("timing/sampling_time", time() - sample_start, distributed=False)
 
