@@ -63,10 +63,11 @@ def main():
 
     print("creating data loader...")
     data = load_data(
-        data_dir=args.data_dir,
+        data_path=args.data_path,
         batch_size=args.batch_size,
         image_size=args.image_size,
-        class_cond=args.class_cond,
+        image_channels=args.image_channels,
+        max_data_value=args.max_data_value,
     )
 
     print("training...")
@@ -93,7 +94,7 @@ def main():
 
 def create_argparser():
     defaults = dict(
-        data_dir="",
+        data_path="",
         schedule_sampler="uniform",
         lr=1e-4,
         weight_decay=0.0,
@@ -108,6 +109,8 @@ def create_argparser():
         fp16_scale_growth=1e-3,
         resume_id='',  # set this to a previous run's wandb id to resume training
         sample_interval=50000,
+        max_data_value=5.6,
+        single_data_point=False,
     )
     defaults.update(model_and_diffusion_defaults())
     parser = argparse.ArgumentParser()

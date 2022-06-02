@@ -2,12 +2,13 @@ This is a fork of the codebase for [Improved Denoising Diffusion Probabilistic M
 
 # Usage
 
-Tested with Python 3.8.13 in a conda environment. Installed requirements with:
+Tested with Python 3.10.4 in a conda environment. Installed requirements with:
 ```
 conda install -c conda-forge mpi4py
 pip install wandb blobfile tqdm
 pip install --upgrade torch torchvision
 pip install -e .
+pip install matplotlib
 ```
 
 This repo logs to wandb, using the wandb entity/username and project name set by:

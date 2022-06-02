@@ -57,13 +57,13 @@ class Upsample(nn.Module):
                  upsampling occurs in the inner-two dimensions.
     """
 
-    def __init__(self, channels, use_conv, dims=2):
+    def __init__(self, channels, use_conv, dims=2, wraparound_pad=False):
         super().__init__()
         self.channels = channels
         self.use_conv = use_conv
         self.dims = dims
         if use_conv:
-            self.conv = conv_nd(dims, channels, channels, 3, padding=1)
+            self.conv = conv_nd(dims, channels, channels, 3, padding=1, wraparound_pad=wraparound_pad)
 
     def forward(self, x):
         assert x.shape[1] == self.channels
@@ -88,14 +88,14 @@ class Downsample(nn.Module):
                  downsampling occurs in the inner-two dimensions.
     """
 
-    def __init__(self, channels, use_conv, dims=2):
+    def __init__(self, channels, use_conv, dims=2, wraparound_pad=False):
         super().__init__()
         self.channels = channels
         self.use_conv = use_conv
         self.dims = dims
         stride = 2 if dims != 3 else (1, 2, 2)
         if use_conv:
-            self.op = conv_nd(dims, channels, channels, 3, stride=stride, padding=1)
+            self.op = conv_nd(dims, channels, channels, 3, stride=stride, padding=1, wraparound_pad=wraparound_pad)
         else:
             self.op = avg_pool_nd(stride)
 
@@ -129,6 +129,7 @@ class ResBlock(TimestepBlock):
         use_scale_shift_norm=False,
         dims=2,
         use_checkpoint=False,
+        wraparound_pad=False,
     ):
         super().__init__()
         self.channels = channels
@@ -142,7 +143,7 @@ class ResBlock(TimestepBlock):
         self.in_layers = nn.Sequential(
             normalization(channels),
             SiLU(),
-            conv_nd(dims, channels, self.out_channels, 3, padding=1),
+            conv_nd(dims, channels, self.out_channels, 3, padding=1, wraparound_pad=wraparound_pad),
         )
         self.emb_layers = nn.Sequential(
             SiLU(),
@@ -156,7 +157,7 @@ class ResBlock(TimestepBlock):
             SiLU(),
             nn.Dropout(p=dropout),
             zero_module(
-                conv_nd(dims, self.out_channels, self.out_channels, 3, padding=1)
+                conv_nd(dims, self.out_channels, self.out_channels, 3, padding=1, wraparound_pad=wraparound_pad)
             ),
         )
 
@@ -164,10 +165,10 @@ class ResBlock(TimestepBlock):
             self.skip_connection = nn.Identity()
         elif use_conv:
             self.skip_connection = conv_nd(
-                dims, channels, self.out_channels, 3, padding=1
+                dims, channels, self.out_channels, 3, padding=1, wraparound_pad=wraparound_pad
             )
         else:
-            self.skip_connection = conv_nd(dims, channels, self.out_channels, 1)
+            self.skip_connection = conv_nd(dims, channels, self.out_channels, 1, wraparound_pad=wraparound_pad)
 
     def forward(self, x, emb):
         """
@@ -205,16 +206,16 @@ class AttentionBlock(nn.Module):
     https://github.com/hojonathanho/diffusion/blob/1e0dceb3b3495bbe19116a5e1b3596cd0706c543/diffusion_tf/models/unet.py#L66.
     """
 
-    def __init__(self, channels, num_heads=1, use_checkpoint=False):
+    def __init__(self, channels, num_heads=1, use_checkpoint=False, wraparound_pad=False):
         super().__init__()
         self.channels = channels
         self.num_heads = num_heads
         self.use_checkpoint = use_checkpoint
 
         self.norm = normalization(channels)
-        self.qkv = conv_nd(1, channels, channels * 3, 1)
+        self.qkv = conv_nd(1, channels, channels * 3, 1, wraparound_pad=wraparound_pad)
         self.attention = QKVAttention()
-        self.proj_out = zero_module(conv_nd(1, channels, channels, 1))
+        self.proj_out = zero_module(conv_nd(1, channels, channels, 1, wraparound_pad=wraparound_pad))
 
     def forward(self, x):
         return checkpoint(self._forward, (x,), self.parameters(), self.use_checkpoint)
@@ -314,6 +315,7 @@ class UNetModel(nn.Module):
         num_heads=1,
         num_heads_upsample=-1,
         use_scale_shift_norm=False,
+        wraparound_pad=False,
     ):
         super().__init__()
 
@@ -346,7 +348,7 @@ class UNetModel(nn.Module):
         self.input_blocks = nn.ModuleList(
             [
                 TimestepEmbedSequential(
-                    conv_nd(dims, in_channels, model_channels, 3, padding=1)
+                    conv_nd(dims, in_channels, model_channels, 3, padding=1, wraparound_pad=wraparound_pad)
                 )
             ]
         )
@@ -433,7 +435,7 @@ class UNetModel(nn.Module):
         self.out = nn.Sequential(
             normalization(ch),
             SiLU(),
-            zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1)),
+            zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1, wraparound_pad=wraparound_pad)),
         )
 
     def convert_to_fp16(self):

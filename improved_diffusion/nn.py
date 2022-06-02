@@ -19,17 +19,49 @@ class GroupNorm32(nn.GroupNorm):
         return super().forward(x.float()).type(x.dtype)
 
 
-def conv_nd(dims, *args, **kwargs):
+class WraparoundPad(nn.Module):
+
+    def __init__(self, padding, dims):
+        super().__init__()
+        self.padding = padding
+        self.dims = dims
+
+    def forward(self, x):
+        """
+        from https://github.com/pytorch/pytorch/issues/3858
+        :param x: shape [H, W]
+        :param pad: int >= 0
+        :param dim: the dimensions over which the tensors are padded
+        :return:
+        """
+        for d in self.dims:
+            if d >= len(x.shape):
+                raise IndexError(f"dim {d} out of range")
+            idx = tuple(slice(0, None if s != d else self.padding, 1) for s in range(len(x.shape)))
+            x = th.cat([x, x[idx]], dim=d)
+            idx = tuple(slice(None if s != d else -2 * self.padding, None if s != d else -self.padding, 1) for s in range(len(x.shape)))
+            x = th.cat([x[idx], x], dim=d)
+            pass
+        return x
+
+
+def conv_nd(dims, *args, wraparound_pad, **kwargs):
     """
     Create a 1D, 2D, or 3D convolution module.
     """
+    if wraparound_pad:
+        padding = kwargs.pop("padding")
+        padder = WraparoundPad(padding, dims=list(range(2, 2+dims)))
+
     if dims == 1:
-        return nn.Conv1d(*args, **kwargs)
+        conv = nn.Conv1d(*args, **kwargs)
     elif dims == 2:
-        return nn.Conv2d(*args, **kwargs)
+        conv = nn.Conv2d(*args, **kwargs)
     elif dims == 3:
-        return nn.Conv3d(*args, **kwargs)
-    raise ValueError(f"unsupported dimensions: {dims}")
+        conv = nn.Conv3d(*args, **kwargs)
+    else:
+        raise ValueError(f"unsupported dimensions: {dims}")
+    return nn.Sequential(padder, conv) if wraparound_pad else conv
 
 
 def linear(*args, **kwargs):

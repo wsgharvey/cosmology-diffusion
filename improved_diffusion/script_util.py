@@ -1,6 +1,8 @@
 import argparse
 import inspect
 
+from improved_diffusion.nn import WraparoundPad
+
 from . import gaussian_diffusion as gd
 from .respace import SpacedDiffusion, space_timesteps
 from .unet import UNetModel
@@ -33,6 +35,7 @@ def model_and_diffusion_defaults():
         rescale_learned_sigmas=True,
         use_checkpoint=False,
         use_scale_shift_norm=True,
+        wraparound_pad=False,
     )
 
 
@@ -57,6 +60,7 @@ def create_model_and_diffusion(
     rescale_learned_sigmas,
     use_checkpoint,
     use_scale_shift_norm,
+    wraparound_pad,
 ):
     model = create_model(
         image_size,
@@ -71,6 +75,7 @@ def create_model_and_diffusion(
         num_heads_upsample=num_heads_upsample,
         use_scale_shift_norm=use_scale_shift_norm,
         dropout=dropout,
+        wraparound_pad=wraparound_pad,
     )
     diffusion = create_gaussian_diffusion(
         steps=diffusion_steps,
@@ -99,9 +104,12 @@ def create_model(
     num_heads_upsample,
     use_scale_shift_norm,
     dropout,
+    wraparound_pad,
 ):
     if image_size == 256:
         channel_mult = (1, 1, 2, 2, 4, 4)
+    elif image_size == 128:
+        channel_mult = (1, 1, 2, 3, 4)
     elif image_size == 64:
         channel_mult = (1, 2, 3, 4)
     elif image_size == 32:
@@ -126,6 +134,7 @@ def create_model(
         num_heads=num_heads,
         num_heads_upsample=num_heads_upsample,
         use_scale_shift_norm=use_scale_shift_norm,
+        wraparound_pad=wraparound_pad,
     )
 
 
