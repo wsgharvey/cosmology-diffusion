@@ -41,7 +41,6 @@ class WraparoundPad(nn.Module):
             x = th.cat([x, x[idx]], dim=d)
             idx = tuple(slice(None if s != d else -2 * self.padding, None if s != d else -self.padding, 1) for s in range(len(x.shape)))
             x = th.cat([x[idx], x], dim=d)
-            pass
         return x
 
 
@@ -49,9 +48,11 @@ def conv_nd(dims, *args, wraparound_pad, **kwargs):
     """
     Create a 1D, 2D, or 3D convolution module.
     """
-    if wraparound_pad:
+    if wraparound_pad and "padding" in kwargs:
         padding = kwargs.pop("padding")
         padder = WraparoundPad(padding, dims=list(range(2, 2+dims)))
+    else:
+        padder = None
 
     if dims == 1:
         conv = nn.Conv1d(*args, **kwargs)
@@ -61,7 +62,7 @@ def conv_nd(dims, *args, wraparound_pad, **kwargs):
         conv = nn.Conv3d(*args, **kwargs)
     else:
         raise ValueError(f"unsupported dimensions: {dims}")
-    return nn.Sequential(padder, conv) if wraparound_pad else conv
+    return nn.Sequential(padder, conv) if padder is not None else conv
 
 
 def linear(*args, **kwargs):

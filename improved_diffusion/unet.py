@@ -124,12 +124,12 @@ class ResBlock(TimestepBlock):
         channels,
         emb_channels,
         dropout,
+        use_conv,
+        use_scale_shift_norm,
+        dims,
+        use_checkpoint,
+        wraparound_pad,
         out_channels=None,
-        use_conv=False,
-        use_scale_shift_norm=False,
-        dims=2,
-        use_checkpoint=False,
-        wraparound_pad=False,
     ):
         super().__init__()
         self.channels = channels
@@ -206,7 +206,7 @@ class AttentionBlock(nn.Module):
     https://github.com/hojonathanho/diffusion/blob/1e0dceb3b3495bbe19116a5e1b3596cd0706c543/diffusion_tf/models/unet.py#L66.
     """
 
-    def __init__(self, channels, num_heads=1, use_checkpoint=False, wraparound_pad=False):
+    def __init__(self, channels, num_heads, use_checkpoint, wraparound_pad):
         super().__init__()
         self.channels = channels
         self.num_heads = num_heads
@@ -366,20 +366,22 @@ class UNetModel(nn.Module):
                         dims=dims,
                         use_checkpoint=use_checkpoint,
                         use_scale_shift_norm=use_scale_shift_norm,
+                        use_conv=False,
+                        wraparound_pad=wraparound_pad,
                     )
                 ]
                 ch = mult * model_channels
                 if ds in attention_resolutions:
                     layers.append(
                         AttentionBlock(
-                            ch, use_checkpoint=use_checkpoint, num_heads=num_heads
+                            ch, use_checkpoint=use_checkpoint, num_heads=num_heads, wraparound_pad=wraparound_pad,
                         )
                     )
                 self.input_blocks.append(TimestepEmbedSequential(*layers))
                 input_block_chans.append(ch)
             if level != len(channel_mult) - 1:
                 self.input_blocks.append(
-                    TimestepEmbedSequential(Downsample(ch, conv_resample, dims=dims))
+                    TimestepEmbedSequential(Downsample(ch, conv_resample, dims=dims, wraparound_pad=wraparound_pad))
                 )
                 input_block_chans.append(ch)
                 ds *= 2
@@ -392,8 +394,10 @@ class UNetModel(nn.Module):
                 dims=dims,
                 use_checkpoint=use_checkpoint,
                 use_scale_shift_norm=use_scale_shift_norm,
+                use_conv=False,
+                wraparound_pad=wraparound_pad,
             ),
-            AttentionBlock(ch, use_checkpoint=use_checkpoint, num_heads=num_heads),
+            AttentionBlock(ch, use_checkpoint=use_checkpoint, num_heads=num_heads, wraparound_pad=wraparound_pad,),
             ResBlock(
                 ch,
                 time_embed_dim,
@@ -401,6 +405,8 @@ class UNetModel(nn.Module):
                 dims=dims,
                 use_checkpoint=use_checkpoint,
                 use_scale_shift_norm=use_scale_shift_norm,
+                use_conv=False,
+                wraparound_pad=wraparound_pad,
             ),
         )
 
@@ -416,6 +422,8 @@ class UNetModel(nn.Module):
                         dims=dims,
                         use_checkpoint=use_checkpoint,
                         use_scale_shift_norm=use_scale_shift_norm,
+                        use_conv=False,
+                        wraparound_pad=wraparound_pad,
                     )
                 ]
                 ch = model_channels * mult
@@ -425,10 +433,11 @@ class UNetModel(nn.Module):
                             ch,
                             use_checkpoint=use_checkpoint,
                             num_heads=num_heads_upsample,
+                            wraparound_pad=wraparound_pad,
                         )
                     )
                 if level and i == num_res_blocks:
-                    layers.append(Upsample(ch, conv_resample, dims=dims))
+                    layers.append(Upsample(ch, conv_resample, dims=dims, wraparound_pad=wraparound_pad))
                     ds //= 2
                 self.output_blocks.append(TimestepEmbedSequential(*layers))
 
