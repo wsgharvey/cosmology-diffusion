@@ -68,6 +68,7 @@ def main():
         image_size=args.image_size,
         image_channels=args.image_channels,
         max_data_value=args.max_data_value,
+        single_data_point=args.single_data_point,
     )
 
     print("training...")
