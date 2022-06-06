@@ -5,49 +5,53 @@ numpy array. This can be used to produce samples for FID evaluation.
 
 import argparse
 import os
-from tkinter import N
+import json
 
 import numpy as np
 import torch as th
 
 from improved_diffusion import dist_util  # we do NOT support distributed sampling
 from improved_diffusion.script_util import (
-    NUM_CLASSES,
     model_and_diffusion_defaults,
     create_model_and_diffusion,
-    add_dict_to_argparser,
     args_to_dict,
     str2bool,
 )
-from improved_diffusion.test_util import get_model_results_path
+from improved_diffusion.test_util import get_model_results_path, Protect
+from improved_diffusion.image_datasets import collapse_two_channel
 
 
 def main(model, args):
 
+    def fname(saved):
+        return args.eval_dir / f"sample-{saved:06d}.npy"
+
     print("sampling...")
     saved = 0
-    while saved < len(args.indices):
+    while saved < args.n_samples:
         model_kwargs = {}
         sample_fn = (
             diffusion.p_sample_loop if not args.use_ddim else diffusion.ddim_sample_loop
         )
         sample = sample_fn(
             model,
-            (args.batch_size, 3, args.image_size, args.image_size),
+            (args.batch_size, args.image_channels, args.image_size, args.image_size),
             clip_denoised=args.clip_denoised,
             model_kwargs=model_kwargs,
         )
         sample = ((sample + 1) * 127.5).clamp(0, 255).to(th.uint8)
         sample = sample.permute(0, 2, 3, 1)
         sample = sample.contiguous()
+        if args.image_channels == 2:
+            sample = collapse_two_channel(sample)
 
         for img in sample.cpu().numpy():
             drange = [-1, 1]  # Range of the generated samples' pixel values
             img = (img - drange[0]) / (drange[1] - drange[0])  * 255  # recon with pixel values in [0, 255]
             img = img.astype(np.uint8)
-            fname = args.eval_dir / f"sample-{saved:06d}.npy"
-            np.save(fname, img)
-            saved += 1
+            np.save(fname, fname(saved))
+            while not os.path.exists(fname(saved)):
+                saved += 1
 
     print("sampling complete")
 
@@ -58,8 +62,8 @@ if __name__ == "__main__":
     parser.add_argument("checkpoint_path", type=str)
     parser.add_argument("--batch_size", type=int, default=8)
     parser.add_argument("--eval_dir", type=str, default=None)
-    parser.add_argument("--indices", type=int, nargs="*", default=None,
-                        help="If not None, only generate videos for the specified indices. Used for handling parallelization.")
+    parser.add_argument("--n_samples", type=int, default=None,
+                        help="Number of samples desired.")
     parser.add_argument("--use_ddim", type=str2bool, default=False)
     parser.add_argument("--timestep_respacing", type=str, default="")
     parser.add_argument("--clip_denoised", type=str2bool, default=True)
@@ -85,12 +89,14 @@ if __name__ == "__main__":
     model = model.to(args.device)
     model.eval()
     args.image_size = model_args.image_size
+    args.image_channels = model_args.image_channels
 
-    # Prepare which image indices to sample (for unconditional generation, index does nothing except change file name)
-    if args.indices is None:
-        assert "SLURM_ARRAY_TASK_ID" in os.environ
-        task_id = int(os.environ["SLURM_ARRAY_TASK_ID"])
-        args.indices = list(range(task_id * args.batch_size, (task_id + 1) * args.batch_size))
-        print(f"Only generating predictions for the batch #{task_id}.")
+    # write config dictionary to the results directory
+    json_path = args.eval_dir / "model_config.json"
+    if not json_path.exists():
+        with Protect(json_path): # avoids race conditions
+            with open(json_path, "w") as f:
+                json.dump(vars(model_args), f, indent=4)
+        print(f"Saved model config at {json_path}")
 
     main(model, args)

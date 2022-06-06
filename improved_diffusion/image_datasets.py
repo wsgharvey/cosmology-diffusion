@@ -44,50 +44,15 @@ def load_data(data_path, batch_size, image_size, image_channels, max_data_value,
             batch = []
 
 
-
-# def load_data(
-#     *, data_dir, batch_size, image_size, class_cond=False, deterministic=False
-# ):
-#     """
-#     For a dataset, create a generator over (images, kwargs) pairs.
-
-#     Each images is an NCHW float tensor, and the kwargs dict contains zero or
-#     more keys, each of which map to a batched Tensor of their own.
-#     The kwargs dict can be used for class labels, in which case the key is "y"
-#     and the values are integer tensors of class labels.
-
-#     :param data_dir: a dataset directory.
-#     :param batch_size: the batch size of each returned pair.
-#     :param image_size: the size to which images are resized.
-#     :param class_cond: if True, include a "y" key in returned dicts for class
-#                        label. If classes are not available and this is true, an
-#                        exception will be raised.
-#     :param deterministic: if True, yield results in a deterministic order.
-#     """
-#     if not data_dir:
-#         raise ValueError("unspecified data directory")
-#     all_files = _list_image_files_recursively(data_dir)
-#     classes = None
-#     if class_cond:
-#         # Assume classes are the first part of the filename,
-#         # before an underscore.
-#         class_names = [bf.basename(path).split("_")[0] for path in all_files]
-#         sorted_classes = {x: i for i, x in enumerate(sorted(set(class_names)))}
-#         classes = [sorted_classes[x] for x in class_names]
-#     dataset = ImageDataset(
-#         image_size,
-#         all_files,
-#         classes=classes,
-#         shard=MPI.COMM_WORLD.Get_rank(),
-#         num_shards=MPI.COMM_WORLD.Get_size(),
-#     )
-#     if deterministic:
-#         loader = DataLoader(
-#             dataset, batch_size=batch_size, shuffle=False, num_workers=1, drop_last=True
-#         )
-#     else:
-#         loader = DataLoader(
-#             dataset, batch_size=batch_size, shuffle=True, num_workers=1, drop_last=True
-#         )
-#     while True:
-#         yield from loader
+def collapse_two_channel(t, max_data_value):
+    """ map Bx2xHxW to Bx1xHxW in range [-1, inf]
+    """
+    # clamp to valid range
+    c1 = t[:, 0:1].clamp(min=-1, max=1)
+    c2 = t[:, 1:2].clamp(min=-1, max=1)
+    # impose additional constraint that one of c1 and c2 is at clamped region
+    d1 = (1-c1).abs()
+    d2 = (-1-c2).abs()
+    c1[d1 < d2] = 1
+    c2[d1 >= d2] = -1
+    return c1 + (1 + c2) * (max_data_value - 1) / 2

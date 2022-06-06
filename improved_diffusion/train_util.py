@@ -26,6 +26,7 @@ from .fp16_util import (
 from .nn import update_ema
 from .resample import LossAwareSampler, UniformSampler
 from .rng_util import rng_decorator
+from .image_datasets import collapse_two_channel
 
 # For ImageNet experiments, this was a good default value.
 # We found that the lg_loss_scale quickly climbed to
@@ -352,7 +353,7 @@ class TrainLoop:
             )
             if self.args.image_channels == 2:
                 # convert back to just 1 channel in range [-1, ...]
-                samples = samples[:, 0:1] + (1 + samples[:, 1:2]) * (self.args.max_data_value - 1) / 2
+                samples = collapse_two_channel(samples, self.args.max_data_value)
             all_samples = concat_images_with_padding(samples, pad_val=0)
             rescaled = ((all_samples + 1) * 255/(1+self.args.max_data_value)).clamp(0, 255)
             img = wandb.Image(Image.fromarray(rescaled.contiguous().cpu().numpy().astype(np.uint8).squeeze(axis=0)))
