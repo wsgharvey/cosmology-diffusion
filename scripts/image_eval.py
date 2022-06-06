@@ -100,23 +100,21 @@ def compute_cross_spectrum(d1, d2, L, kmin=None, kmax=None, nk=64, dimensionless
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--eval_dir", type=str, required=True)
-    parser.add_argument("--num_samples", type=int, default=None, help="Number of samples to evaluate.")
+    parser.add_argument("--n_samples", type=int, default=None, help="Number of samples to evaluate.")
     args = parser.parse_args()
 
-    if args.dataset is None or args.T is None:
-        model_config_path = Path(args.eval_dir) / "model_config.json"
-        assert model_config_path.exists(), f"Could not find model config at {model_config_path}"
-    files = glob.glob(Path(args.eval_dir) / "samples" / "*.npy")[:args.num_samples]
+    files = sorted(glob.glob(str(Path(args.eval_dir) / "samples" / "*.npy")))[:args.n_samples]
     samples = np.stack([np.load(f) for f in files])
+    print(samples.shape, samples.min(), samples.max())
 
-    densities = (1 + samples).exp() - 1  # densities in range [0, inf]
+    densities = np.exp(1 + samples) - 1  # densities in range [0, inf]
 
     fig, axes = plt.subplots(ncols=2)
     for ax in axes:
         ax.set_xlabel(r'$k$ [$h$/Mpc]')
         ax.set_xscale('log')
         ax.set_ylabel(r'$\Delta^2(k)$')
-        ax.set_yscale('log')
+    axes[0].set_yscale('log')
     axes[0].set_title("Power spectrum")
     axes[1].set_title("Cross correlation")
     for s, density in enumerate(densities):
@@ -126,8 +124,7 @@ if __name__ == "__main__":
         # compute cross correlation
         k2, power2, _, _ = compute_cross_spectrum(density, densities[s-1], L=256.)
         axes[1].plot(k2, power2, alpha=0.5)
-        print(f"Done {s} samples.")
-    fig.savefig(Path(args.eval_dir) / "power-spectra-{args.num_samples}.pdf", bbox_inches='tight')
+    fig.savefig(Path(args.eval_dir) / f"power-spectra-{args.n_samples}.pdf", bbox_inches='tight')
 
     mean_densities = np.stack([density.mean() for density in densities])
     dm = mean_densities.mean()
@@ -139,7 +136,7 @@ if __name__ == "__main__":
     ax.set_xlabel('log(1+density)')
     ax.set_ylabel('pdf')
     ax.set_yscale('log')
-    fig.savefig(Path(args.eval_dir) / "density-histogram.pdf", bbox_inches='tight')
+    fig.savefig(Path(args.eval_dir) / f"density-histogram-{args.n_samples}.pdf", bbox_inches='tight')
 
     # # Save all metrics as a pickle file (update it if it already exists)
     # with test_util.Protect(pickle_path): # avoids race conditions

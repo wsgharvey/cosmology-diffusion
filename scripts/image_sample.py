@@ -39,18 +39,13 @@ def main(model, args):
             clip_denoised=args.clip_denoised,
             model_kwargs=model_kwargs,
         )
-        sample = ((sample + 1) * 127.5).clamp(0, 255).to(th.uint8)
-        sample = sample.permute(0, 2, 3, 1)
-        sample = sample.contiguous()
         if args.image_channels == 2:
-            sample = collapse_two_channel(sample)
+            sample = collapse_two_channel(sample, args.max_data_value)
+        sample = sample.squeeze(dim=1).contiguous()
 
         for img in sample.cpu().numpy():
-            drange = [-1, 1]  # Range of the generated samples' pixel values
-            img = (img - drange[0]) / (drange[1] - drange[0])  * 255  # recon with pixel values in [0, 255]
-            img = img.astype(np.uint8)
             np.save(fname(saved), img)
-            while not os.path.exists(fname(saved)):
+            while os.path.exists(fname(saved)):
                 saved += 1
 
     print("sampling complete")
@@ -90,6 +85,7 @@ if __name__ == "__main__":
     model.eval()
     args.image_size = model_args.image_size
     args.image_channels = model_args.image_channels
+    args.max_data_value = model_args.max_data_value
 
     # write config dictionary to the results directory
     json_path = args.eval_dir / "model_config.json"
