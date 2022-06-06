@@ -349,7 +349,7 @@ class TrainLoop:
             samples = self.diffusion.p_sample_loop(
                 self.model,
                 (self.args.batch_size, self.args.image_channels, self.args.image_size, self.args.image_size),
-                clip_denoised=True,
+                clip_denoised=False,
             )
             if self.args.image_channels == 2:
                 # convert back to just 1 channel in range [-1, ...]

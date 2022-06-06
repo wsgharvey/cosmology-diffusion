@@ -61,7 +61,7 @@ if __name__ == "__main__":
                         help="Number of samples desired.")
     parser.add_argument("--use_ddim", type=str2bool, default=False)
     parser.add_argument("--timestep_respacing", type=str, default="")
-    parser.add_argument("--clip_denoised", type=str2bool, default=True)
+    parser.add_argument("--clip_denoised", type=str2bool, default=False)
     parser.add_argument("--device", default="cuda" if th.cuda.is_available() else "cpu")
     args = parser.parse_args()
 
