@@ -1,3 +1,6 @@
+*.dat
+*.png
+*.pdf
 datasets/cifar_*
 wandb
 checkpoints

@@ -3,7 +3,9 @@ import numpy as np
 from argparse import ArgumentParser
 from pathlib import Path
 import pickle
+import glob
 from collections import defaultdict
+import matplotlib.pyplot as plt
 
 # Metrics
 from improved_diffusion import test_util
@@ -104,15 +106,48 @@ if __name__ == "__main__":
     if args.dataset is None or args.T is None:
         model_config_path = Path(args.eval_dir) / "model_config.json"
         assert model_config_path.exists(), f"Could not find model config at {model_config_path}"
+    files = glob.glob(Path(args.eval_dir) / "samples" / "*.npy")[:args.num_samples]
+    samples = np.stack([np.load(f) for f in files])
 
-    # Save all metrics as a pickle file (update it if it already exists)
-    with test_util.Protect(pickle_path): # avoids race conditions
-        if pickle_path.exists():
-            metrics_pkl = pickle.load(open(pickle_path, "rb"))
-        else:
-            metrics_pkl = {}
-        for mode in args.modes:
-            metrics_pkl[mode] = new_metrics[mode]
-        pickle.dump(metrics_pkl, open(pickle_path, "wb"))
+    densities = (1 + samples).exp() - 1  # densities in range [0, inf]
 
-    print(f"Saved metrics to {pickle_path}.")
+    fig, axes = plt.subplots(ncols=2)
+    for ax in axes:
+        ax.set_xlabel(r'$k$ [$h$/Mpc]')
+        ax.set_xscale('log')
+        ax.set_ylabel(r'$\Delta^2(k)$')
+        ax.set_yscale('log')
+    axes[0].set_title("Power spectrum")
+    axes[1].set_title("Cross correlation")
+    for s, density in enumerate(densities):
+        # compute autocorrelation
+        k, power, _, _ = compute_cross_spectrum(density, density, L=256.)
+        axes[0].plot(k, power, alpha=0.5)
+        # compute cross correlation
+        k2, power2, _, _ = compute_cross_spectrum(density, densities[s-1], L=256.)
+        axes[1].plot(k2, power2, alpha=0.5)
+        print(f"Done {s} samples.")
+    fig.savefig(Path(args.eval_dir) / "power-spectra-{args.num_samples}.pdf", bbox_inches='tight')
+
+    mean_densities = np.stack([density.mean() for density in densities])
+    dm = mean_densities.mean()
+    ds = mean_densities.std()
+
+    # plot histogram of np.log(1+density) = np.log(2+overdensity)
+    fig, ax = plt.subplots()
+    ax.hist(1+samples.reshape(-1), bins=100, density=True)
+    ax.set_xlabel('log(1+density)')
+    ax.set_ylabel('pdf')
+    ax.set_yscale('log')
+    fig.savefig(Path(args.eval_dir) / "density-histogram.pdf", bbox_inches='tight')
+
+    # # Save all metrics as a pickle file (update it if it already exists)
+    # with test_util.Protect(pickle_path): # avoids race conditions
+    #     if pickle_path.exists():
+    #         metrics_pkl = pickle.load(open(pickle_path, "rb"))
+    #     else:
+    #         metrics_pkl = {}
+    #     for mode in args.modes:
+    #         metrics_pkl[mode] = new_metrics[mode]
+    #     pickle.dump(metrics_pkl, open(pickle_path, "wb"))
+    # print(f"Saved metrics to {pickle_path}.")

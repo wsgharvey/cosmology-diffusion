@@ -49,7 +49,7 @@ def main(model, args):
             drange = [-1, 1]  # Range of the generated samples' pixel values
             img = (img - drange[0]) / (drange[1] - drange[0])  * 255  # recon with pixel values in [0, 255]
             img = img.astype(np.uint8)
-            np.save(fname, fname(saved))
+            np.save(fname(saved), img)
             while not os.path.exists(fname(saved)):
                 saved += 1
 
