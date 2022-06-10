@@ -29,10 +29,12 @@ def expand_channels(img, image_channels, max_val):
         raise ValueError("image_channels must be 1 or 2")
 
 
-def load_data(data_path, batch_size, image_size, image_channels, max_data_value, single_data_point=False, deterministic=False):
+def load_data(data_path, batch_size, image_channels, max_data_value, single_data_point=False, deterministic=False):
 
     def load_data(fname):
         array = np.loadtxt(os.path.join(data_path, fname)).astype(np.float32)
+        image_size_cubed = len(array[:, 3])
+        image_size = int(np.cbrt(image_size_cubed))
         array = array[:, 3].reshape((image_size, image_size, image_size))
         array = -1 + np.log(2 + array)
         assert max_data_value >= array.max()
@@ -44,8 +46,9 @@ def load_data(data_path, batch_size, image_size, image_channels, max_data_value,
         # randomly sample slice of our data
         idx = np.random.randint(0, len(all_data))
         data, _, _, g = all_data[idx]
-        slice_i = np.random.randint(0, image_size)
         slice_dim = np.random.randint(0, 3)
+        image_size = data.shape[slice_dim]
+        slice_i = np.random.randint(0, image_size)
         flip = np.random.randint(0, 2)
         rotation = np.random.randint(0, 4)
         if single_data_point:

@@ -351,7 +351,6 @@ class TrainLoop:
             samples = self.diffusion.p_sample_loop(
                 self.model,
                 (self.args.batch_size, self.args.image_channels, self.args.image_size, self.args.image_size),
-                clip_denoised=False,
                 model_kwargs=model_kwargs,
                 clip_denoised=False,
             )

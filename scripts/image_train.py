@@ -54,22 +54,23 @@ def main():
     resume = bool(args.resume_id)
     init_wandb(config=args, id=args.resume_id if resume else None)
 
+    print("creating data loader...")
+    data = load_data(
+        data_path=args.data_path,
+        batch_size=args.batch_size,
+        image_channels=args.image_channels,
+        max_data_value=args.max_data_value,
+        single_data_point=args.single_data_point,
+    )
+    if args.image_size is None:
+        args.image_size = next(data)[0].shape[-1]
+
     print("creating model and diffusion...")
     model, diffusion = create_model_and_diffusion(
         **args_to_dict(args, model_and_diffusion_defaults().keys())
     )
     model.to(dist_util.dev())
     schedule_sampler = create_named_schedule_sampler(args.schedule_sampler, diffusion)
-
-    print("creating data loader...")
-    data = load_data(
-        data_path=args.data_path,
-        batch_size=args.batch_size,
-        image_size=args.image_size,
-        image_channels=args.image_channels,
-        max_data_value=args.max_data_value,
-        single_data_point=args.single_data_point,
-    )
 
     print("training...")
     TrainLoop(
