@@ -222,7 +222,7 @@ class TrainLoop:
                 self.ddp_model,
                 micro,
                 t,
-                model_kwargs=micro_cond,
+                model_kwargs=micro_cond if self.model.cond_dim > 0 else {},
             )
 
             if last_batch or not self.use_ddp:
@@ -346,10 +346,13 @@ class TrainLoop:
             self.model.load_state_dict(copy.deepcopy(self._master_params_to_state_dict(self.ema_params[0])))
 
             print("sampling...")
+            y = th.tensor([1.0, 0.773, 0.256, 0.9]*self.args.batch_size)[:self.args.batch_size].view(-1, 1)
+            model_kwargs = {} if self.model.cond_dim == 0 else {"y": y.to(dist_util.dev())}
             samples = self.diffusion.p_sample_loop(
                 self.model,
                 (self.args.batch_size, self.args.image_channels, self.args.image_size, self.args.image_size),
                 clip_denoised=True,
+                model_kwargs=model_kwargs,
             )
             if self.args.image_channels == 2:
                 # convert back to just 1 channel in range [-1, ...]

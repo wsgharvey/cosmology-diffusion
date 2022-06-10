@@ -16,7 +16,7 @@ def model_and_diffusion_defaults():
     """
     return dict(
         image_size=64,
-        image_channels=3,
+        image_channels=1,
         num_channels=128,
         num_res_blocks=2,
         num_heads=4,
@@ -25,7 +25,7 @@ def model_and_diffusion_defaults():
         dropout=0.0,
         learn_sigma=False,
         sigma_small=False,
-        class_cond=False,
+        cond_dim=0,
         diffusion_steps=1000,
         noise_schedule="linear",
         timestep_respacing="",
@@ -35,14 +35,14 @@ def model_and_diffusion_defaults():
         rescale_learned_sigmas=True,
         use_checkpoint=False,
         use_scale_shift_norm=True,
-        wraparound_pad=False,
+        wraparound_pad=True,
     )
 
 
 def create_model_and_diffusion(
     image_size,
     image_channels,
-    class_cond,
+    cond_dim,
     learn_sigma,
     sigma_small,
     num_channels,
@@ -68,7 +68,7 @@ def create_model_and_diffusion(
         num_channels,
         num_res_blocks,
         learn_sigma=learn_sigma,
-        class_cond=class_cond,
+        cond_dim=cond_dim,
         use_checkpoint=use_checkpoint,
         attention_resolutions=attention_resolutions,
         num_heads=num_heads,
@@ -97,7 +97,7 @@ def create_model(
     num_channels,
     num_res_blocks,
     learn_sigma,
-    class_cond,
+    cond_dim,
     use_checkpoint,
     attention_resolutions,
     num_heads,
@@ -129,7 +129,7 @@ def create_model(
         attention_resolutions=tuple(attention_ds),
         dropout=dropout,
         channel_mult=channel_mult,
-        num_classes=(NUM_CLASSES if class_cond else None),
+        cond_dim=cond_dim,
         use_checkpoint=use_checkpoint,
         num_heads=num_heads,
         num_heads_upsample=num_heads_upsample,

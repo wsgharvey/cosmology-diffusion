@@ -293,8 +293,7 @@ class UNetModel(nn.Module):
     :param conv_resample: if True, use learned convolutions for upsampling and
         downsampling.
     :param dims: determines if the signal is 1D, 2D, or 3D.
-    :param num_classes: if specified (as an int), then this model will be
-        class-conditional with `num_classes` classes.
+    :param cond_dim: if specified (as an int), then this model will be conditional
     :param use_checkpoint: use gradient checkpointing to reduce memory usage.
     :param num_heads: the number of attention heads in each attention layer.
     """
@@ -310,7 +309,7 @@ class UNetModel(nn.Module):
         channel_mult=(1, 2, 4, 8),
         conv_resample=True,
         dims=2,
-        num_classes=None,
+        cond_dim=0,
         use_checkpoint=False,
         num_heads=1,
         num_heads_upsample=-1,
@@ -330,7 +329,7 @@ class UNetModel(nn.Module):
         self.dropout = dropout
         self.channel_mult = channel_mult
         self.conv_resample = conv_resample
-        self.num_classes = num_classes
+        self.cond_dim = cond_dim
         self.use_checkpoint = use_checkpoint
         self.num_heads = num_heads
         self.num_heads_upsample = num_heads_upsample
@@ -342,8 +341,12 @@ class UNetModel(nn.Module):
             linear(time_embed_dim, time_embed_dim),
         )
 
-        if self.num_classes is not None:
-            self.label_emb = nn.Embedding(num_classes, time_embed_dim)
+        if self.cond_dim > 0:
+            self.cond_emb = nn.Sequential(
+                linear(cond_dim, time_embed_dim),
+                SiLU(),
+                linear(time_embed_dim, time_embed_dim),
+            )
 
         self.input_blocks = nn.ModuleList(
             [
@@ -480,15 +483,15 @@ class UNetModel(nn.Module):
         :return: an [N x C x ...] Tensor of outputs.
         """
         assert (y is not None) == (
-            self.num_classes is not None
-        ), "must specify y if and only if the model is class-conditional"
+            self.cond_dim > 0
+        ), "must specify y if and only if the model is conditional"
 
         hs = []
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
 
-        if self.num_classes is not None:
-            assert y.shape == (x.shape[0],)
-            emb = emb + self.label_emb(y)
+        if self.cond_dim > 0:
+            assert y.shape == (x.shape[0], self.cond_dim)
+            emb = emb + self.cond_emb(y)
 
         h = x.type(self.inner_dtype)
         for module in self.input_blocks:
@@ -516,9 +519,9 @@ class UNetModel(nn.Module):
         """
         hs = []
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
-        if self.num_classes is not None:
+        if self.cond_dim > 0:
             assert y.shape == (x.shape[0],)
-            emb = emb + self.label_emb(y)
+            emb = emb + self.cond_emb(y)
         result = dict(down=[], up=[])
         h = x.type(self.inner_dtype)
         for module in self.input_blocks:
