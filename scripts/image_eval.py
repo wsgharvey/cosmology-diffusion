@@ -2,13 +2,14 @@ from collections import defaultdict
 import numpy as np
 from argparse import ArgumentParser
 from pathlib import Path
-import pickle
+import json
 import glob
 from collections import defaultdict
+import argparse
 import matplotlib.pyplot as plt
 
 # Metrics
-from improved_diffusion import test_util
+from improved_diffusion.image_datasets import load_data
 
 
 def compute_cross_spectrum(d1, d2, L, kmin=None, kmax=None, nk=64, dimensionless=True, eps_slop=1e-3):
@@ -103,11 +104,22 @@ if __name__ == "__main__":
     parser.add_argument("--n_samples", type=int, default=None, help="Number of samples to evaluate.")
     args = parser.parse_args()
 
+    # load model samples
     files = sorted(glob.glob(str(Path(args.eval_dir) / "samples" / "*.npy")))[:args.n_samples]
     samples = np.stack([np.load(f) for f in files])
     print(samples.shape, samples.min(), samples.max())
+    # load dataset samples (getting arguments from the saved config)
+    model_config_path = Path(args.eval_dir) / "model_config.json"
+    assert model_config_path.exists(), f"Could not find model config at {model_config_path}"
+    with open(model_config_path, "r") as f:
+        model_args = argparse.Namespace(**json.load(f))
+    data, _ = next(load_data(
+        data_path=model_args.data_path, batch_size=args.n_samples,
+        image_channels=model_args.image_channels, max_data_value=model_args.max_data_value
+    ))
 
     densities = np.exp(1 + samples) - 1  # densities in range [0, inf]
+    data_densities = np.exp(1 + data) - 1
 
     fig, axes = plt.subplots(ncols=2)
     for ax in axes:
@@ -117,34 +129,35 @@ if __name__ == "__main__":
     axes[0].set_yscale('log')
     axes[0].set_title("Power spectrum")
     axes[1].set_title("Cross correlation")
-    for s, density in enumerate(densities):
-        # compute autocorrelation
-        k, power, _, _ = compute_cross_spectrum(density, density, L=256.)
-        axes[0].plot(k, power, alpha=0.5)
-        # compute cross correlation
-        k2, power2, _, _ = compute_cross_spectrum(density, densities[s-1], L=256.)
-        axes[1].plot(k2, power2, alpha=0.5)
+    def get_power_spectra(densities):
+        power = []
+        cross = []
+        for s, density in enumerate(densities):
+        k, p, _, _ = compute_cross_spectrum(density, density, L=256.)
+        power.append(p)
+        _, c, _, _ = compute_cross_spectrum(density, densities[s-1], L=256.)
+        cross.append(c)
+        return k, np.array(power), np.array(cross)
+    k, power, cross = get_power_spectra(densities)
+    k, data_power, data_cross = get_power_spectra(data_densities)
+    col_ddpm, col_data = 'b', 'o'
+    axes[0].plot(k, power.mean(dim=0), label="DDPM", color=col_ddpm)
+    axes[0].fill_between(k, power.mean(dim=0)-power.std(dim=0), power.mean(dim=0)+power.std(dim=0), alpha=0.2, color=col_ddpm)
+    axes[1].plot(k, cross.mean(dim=0), label="DDPM", color=col_ddpm)
+    axes[1].fill_between(k, cross.mean(dim=0)-cross.std(dim=0), cross.mean(dim=0)+cross.std(dim=0), alpha=0.2, color=col_ddpm)
+    axes[0].plot(k, data_power.mean(dim=0), label="Data", color=col_data)
+    axes[0].fill_between(k, data_power.mean(dim=0)-data_power.std(dim=0), data_power.mean(dim=0)+data_power.std(dim=0), alpha=0.2, color=col_data)
+    axes[1].plot(k, data_cross.mean(dim=0), label="Data", color=col_data)
+    axes[1].fill_between(k, data_cross.mean(dim=0)-data_cross.std(dim=0), data_cross.mean(dim=0)+data_cross.std(dim=0), alpha=0.2, color=col_data)
+    axes[1].legend()
     fig.savefig(Path(args.eval_dir) / f"power-spectra-{args.n_samples}.pdf", bbox_inches='tight')
-
-    mean_densities = np.stack([density.mean() for density in densities])
-    dm = mean_densities.mean()
-    ds = mean_densities.std()
 
     # plot histogram of np.log(1+density) = np.log(2+overdensity)
     fig, ax = plt.subplots()
-    ax.hist(1+samples.reshape(-1), bins=100, density=True)
+    ax.hist(1+samples.reshape(-1), bins=100, density=True, range=[-1, model_args.max_data_value+1], label="DDPM", alpha=0.5)
+    ax.hist(1+data.reshape(-1), bins=100, density=True, range=[-1, model_args.max_data_value+1], label="Data", alpha=0.5)
     ax.set_xlabel('log(1+density)')
     ax.set_ylabel('pdf')
     ax.set_yscale('log')
+    ax.legend()
     fig.savefig(Path(args.eval_dir) / f"density-histogram-{args.n_samples}.pdf", bbox_inches='tight')
-
-    # # Save all metrics as a pickle file (update it if it already exists)
-    # with test_util.Protect(pickle_path): # avoids race conditions
-    #     if pickle_path.exists():
-    #         metrics_pkl = pickle.load(open(pickle_path, "rb"))
-    #     else:
-    #         metrics_pkl = {}
-    #     for mode in args.modes:
-    #         metrics_pkl[mode] = new_metrics[mode]
-    #     pickle.dump(metrics_pkl, open(pickle_path, "wb"))
-    # print(f"Saved metrics to {pickle_path}.")
