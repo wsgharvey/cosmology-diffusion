@@ -113,10 +113,10 @@ if __name__ == "__main__":
     assert model_config_path.exists(), f"Could not find model config at {model_config_path}"
     with open(model_config_path, "r") as f:
         model_args = argparse.Namespace(**json.load(f))
-    data, _ = next(load_data(
+    data = next(load_data(
         data_path=model_args.data_path, batch_size=args.n_samples,
-        image_channels=model_args.image_channels, max_data_value=model_args.max_data_value
-    ))
+        image_channels=1, max_data_value=model_args.max_data_value
+    ))[0].squeeze(dim=1).numpy()
 
     densities = np.exp(1 + samples) - 1  # densities in range [0, inf]
     data_densities = np.exp(1 + data) - 1
@@ -133,29 +133,29 @@ if __name__ == "__main__":
         power = []
         cross = []
         for s, density in enumerate(densities):
-        k, p, _, _ = compute_cross_spectrum(density, density, L=256.)
-        power.append(p)
-        _, c, _, _ = compute_cross_spectrum(density, densities[s-1], L=256.)
-        cross.append(c)
+            k, p, _, _ = compute_cross_spectrum(density, density, L=256.)
+            power.append(p)
+            _, c, _, _ = compute_cross_spectrum(density, densities[s-1], L=256.)
+            cross.append(c)
         return k, np.array(power), np.array(cross)
     k, power, cross = get_power_spectra(densities)
     k, data_power, data_cross = get_power_spectra(data_densities)
-    col_ddpm, col_data = 'b', 'o'
-    axes[0].plot(k, power.mean(dim=0), label="DDPM", color=col_ddpm)
-    axes[0].fill_between(k, power.mean(dim=0)-power.std(dim=0), power.mean(dim=0)+power.std(dim=0), alpha=0.2, color=col_ddpm)
-    axes[1].plot(k, cross.mean(dim=0), label="DDPM", color=col_ddpm)
-    axes[1].fill_between(k, cross.mean(dim=0)-cross.std(dim=0), cross.mean(dim=0)+cross.std(dim=0), alpha=0.2, color=col_ddpm)
-    axes[0].plot(k, data_power.mean(dim=0), label="Data", color=col_data)
-    axes[0].fill_between(k, data_power.mean(dim=0)-data_power.std(dim=0), data_power.mean(dim=0)+data_power.std(dim=0), alpha=0.2, color=col_data)
-    axes[1].plot(k, data_cross.mean(dim=0), label="Data", color=col_data)
-    axes[1].fill_between(k, data_cross.mean(dim=0)-data_cross.std(dim=0), data_cross.mean(dim=0)+data_cross.std(dim=0), alpha=0.2, color=col_data)
+    col_ddpm, col_data = 'b', 'r'
+    axes[0].plot(k, power.mean(axis=0), label="DDPM", color=col_ddpm)
+    axes[0].fill_between(k, power.mean(axis=0)-power.std(axis=0), power.mean(axis=0)+power.std(axis=0), alpha=0.2, color=col_ddpm)
+    axes[1].plot(k, cross.mean(axis=0), label="DDPM", color=col_ddpm)
+    axes[1].fill_between(k, cross.mean(axis=0)-cross.std(axis=0), cross.mean(axis=0)+cross.std(axis=0), alpha=0.2, color=col_ddpm)
+    axes[0].plot(k, data_power.mean(axis=0), label="Data", color=col_data)
+    axes[0].fill_between(k, data_power.mean(axis=0)-data_power.std(axis=0), data_power.mean(axis=0)+data_power.std(axis=0), alpha=0.2, color=col_data)
+    axes[1].plot(k, data_cross.mean(axis=0), label="Data", color=col_data)
+    axes[1].fill_between(k, data_cross.mean(axis=0)-data_cross.std(axis=0), data_cross.mean(axis=0)+data_cross.std(axis=0), alpha=0.2, color=col_data)
     axes[1].legend()
     fig.savefig(Path(args.eval_dir) / f"power-spectra-{args.n_samples}.pdf", bbox_inches='tight')
 
     # plot histogram of np.log(1+density) = np.log(2+overdensity)
     fig, ax = plt.subplots()
-    ax.hist(1+samples.reshape(-1), bins=100, density=True, range=[-1, model_args.max_data_value+1], label="DDPM", alpha=0.5)
-    ax.hist(1+data.reshape(-1), bins=100, density=True, range=[-1, model_args.max_data_value+1], label="Data", alpha=0.5)
+    ax.hist(1+samples.reshape(-1), bins=100, density=True, range=[-1, model_args.max_data_value+1], label="DDPM", alpha=0.5, color=col_ddpm)
+    ax.hist(1+data.reshape(-1), bins=100, density=True, range=[-1, model_args.max_data_value+1], label="Data", alpha=0.5, color=col_data)
     ax.set_xlabel('log(1+density)')
     ax.set_ylabel('pdf')
     ax.set_yscale('log')

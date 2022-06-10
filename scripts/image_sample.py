@@ -24,7 +24,7 @@ from improved_diffusion.image_datasets import collapse_two_channel
 def main(model, args):
 
     def fname(saved):
-        return args.eval_dir / f"sample-{saved:06d}.npy"
+        return args.eval_dir / "samples" / f"sample-{saved:06d}.npy"
 
     print("sampling...")
     saved = 0
@@ -66,8 +66,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Prepare samples directory
-    args.eval_dir = get_model_results_path(args) / "samples"
-    args.eval_dir.mkdir(parents=True, exist_ok=True)
+    args.eval_dir = get_model_results_path(args)
+    (args.eval_dir / "samples").mkdir(parents=True, exist_ok=True)
 
     # Load the checkpoint (state dictionary and config)
     data = dist_util.load_state_dict(args.checkpoint_path, map_location="cpu")
