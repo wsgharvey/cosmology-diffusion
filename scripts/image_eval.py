@@ -97,7 +97,6 @@ def compute_cross_spectrum(d1, d2, L, kmin=None, kmax=None, nk=64, dimensionless
 
 
 
-
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--eval_dir", type=str, required=True)

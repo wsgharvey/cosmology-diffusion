@@ -18,7 +18,6 @@ from improved_diffusion.script_util import (
     str2bool,
 )
 from improved_diffusion.test_util import get_model_results_path, Protect
-from improved_diffusion.image_datasets import collapse_two_channel
 
 
 def main(model, args):
@@ -39,8 +38,6 @@ def main(model, args):
             clip_denoised=args.clip_denoised,
             model_kwargs=model_kwargs,
         )
-        if args.image_channels == 2:
-            sample = collapse_two_channel(sample, args.max_data_value)
         sample = sample.squeeze(dim=1).contiguous()
 
         for img in sample.cpu().numpy():
@@ -85,7 +82,6 @@ if __name__ == "__main__":
     model.eval()
     args.image_size = model_args.image_size
     args.image_channels = model_args.image_channels
-    args.max_data_value = model_args.max_data_value
 
     # write config dictionary to the results directory
     json_path = args.eval_dir / "model_config.json"

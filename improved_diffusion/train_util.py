@@ -3,6 +3,7 @@ import functools
 import os
 import wandb
 
+import math
 import blobfile as bf
 import glob
 from pathlib import Path
@@ -26,7 +27,6 @@ from .fp16_util import (
 from .nn import update_ema
 from .resample import LossAwareSampler, UniformSampler
 from .rng_util import rng_decorator
-from .image_datasets import collapse_two_channel
 
 # For ImageNet experiments, this was a good default value.
 # We found that the lg_loss_scale quickly climbed to
@@ -346,20 +346,23 @@ class TrainLoop:
             self.model.load_state_dict(copy.deepcopy(self._master_params_to_state_dict(self.ema_params[0])))
 
             print("sampling...")
-            y = th.tensor([1.0, 0.773, 0.256, 0.9]*self.args.batch_size)[:self.args.batch_size].view(-1, 1)
-            model_kwargs = {} if self.model.cond_dim == 0 else {"y": y.to(dist_util.dev())}
+            #y = th.tensor([1.0, 0.773, 0.256, 0.9]*self.args.batch_size)[:self.args.batch_size].view(-1, 1)
+            _, model_kwargs = next(self.data)
+            n_conds = math.ceil(self.args.batch_size/2)
+            model_kwargs = {k: v[:n_conds].repeat_interleave(2, dim=0).to(dist_util.dev()) for k, v in model_kwargs.items()}
             samples = self.diffusion.p_sample_loop(
                 self.model,
                 (self.args.batch_size, self.args.image_channels, self.args.image_size, self.args.image_size),
                 model_kwargs=model_kwargs,
                 clip_denoised=False,
             )
-            if self.args.image_channels == 2:
-                # convert back to just 1 channel in range [-1, ...]
-                samples = collapse_two_channel(samples, self.args.max_data_value)
-            all_samples = concat_images_with_padding(samples, pad_val=0)
-            rescaled = ((all_samples + 1) * 255/(1+self.args.max_data_value)).clamp(0, 255)
-            img = wandb.Image(Image.fromarray(rescaled.contiguous().cpu().numpy().astype(np.uint8).squeeze(axis=0)))
+            samples = (samples + 1) * 255/(1+samples.max())
+            if self.args.image_conditional:
+                image_cond = 1 + 255/2 * model_kwargs['image_cond']/2  # scale unit Gaussian to roughly fit in [0, 255]
+                samples = concat_images_with_padding([image_cond, samples], pad_val=0, horizontal=False, pad_dim=2)
+            samples = concat_images_with_padding(samples, pad_val=0, pad_dim=2)
+            img = wandb.Image(Image.fromarray(samples.clamp(0, 255).contiguous().cpu().numpy().astype(np.uint8).squeeze(axis=0)),
+                              caption=str(model_kwargs["y"].flatten().numpy()))
             logger.logkv("samples/all", img, distributed=False)
             logger.logkv("timing/sampling_time", time() - sample_start, distributed=False)
 
@@ -426,13 +429,13 @@ def concat_images_with_padding(images, horizontal=True,
     """Cocatenates a list (or batched tensor) of CxHxW images, with padding in
     between, for pretty viewing.
     """
-    _, h, w = images[0].shape
+    *_, h, w = images[0].shape
     pad_h, pad_w = (h, pad_dim) if horizontal else (pad_dim, w)
-    padding = th.zeros_like(images[0][:, :pad_h, :pad_w]) + pad_val
+    padding = th.zeros_like(images[0][..., :pad_h, :pad_w]) + pad_val
     images_with_padding = []
     for image in images:
         images_with_padding.extend([image, padding])
     if pad_ends:
         images_with_padding = [padding, *images_with_padding, padding]
     images_with_padding = images_with_padding[:-1]   # remove final pad
-    return th.cat(images_with_padding, dim=2 if horizontal else 1)
+    return th.cat(images_with_padding, dim=-1 if horizontal else -2)

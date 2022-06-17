@@ -315,13 +315,14 @@ class UNetModel(nn.Module):
         num_heads_upsample=-1,
         use_scale_shift_norm=False,
         wraparound_pad=False,
+        image_conditional=False,
     ):
         super().__init__()
 
         if num_heads_upsample == -1:
             num_heads_upsample = num_heads
 
-        self.in_channels = in_channels
+        self.in_channels = in_channels * 2 if image_conditional else in_channels
         self.model_channels = model_channels
         self.out_channels = out_channels
         self.num_res_blocks = num_res_blocks
@@ -333,6 +334,7 @@ class UNetModel(nn.Module):
         self.use_checkpoint = use_checkpoint
         self.num_heads = num_heads
         self.num_heads_upsample = num_heads_upsample
+        self.image_conditional = image_conditional
 
         time_embed_dim = model_channels * 4
         self.time_embed = nn.Sequential(
@@ -351,7 +353,7 @@ class UNetModel(nn.Module):
         self.input_blocks = nn.ModuleList(
             [
                 TimestepEmbedSequential(
-                    conv_nd(dims, in_channels, model_channels, 3, padding=1, wraparound_pad=wraparound_pad)
+                    conv_nd(dims, self.in_channels, model_channels, 3, padding=1, wraparound_pad=wraparound_pad)
                 )
             ]
         )
@@ -473,7 +475,7 @@ class UNetModel(nn.Module):
         """
         return next(self.input_blocks.parameters()).dtype
 
-    def forward(self, x, timesteps, y=None):
+    def forward(self, x, timesteps, y=None, image_cond=None):
         """
         Apply the model to an input batch.
 
@@ -485,6 +487,9 @@ class UNetModel(nn.Module):
         assert (y is not None) == (
             self.cond_dim > 0
         ), "must specify y if and only if the model is conditional"
+
+        if self.image_conditional:
+            x = th.cat([x, image_cond], dim=1)
 
         hs = []
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))

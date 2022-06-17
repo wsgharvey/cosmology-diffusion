@@ -58,8 +58,6 @@ def main():
     data = load_data(
         data_path=args.data_path,
         batch_size=args.batch_size,
-        image_channels=args.image_channels,
-        max_data_value=args.max_data_value,
         single_data_point=args.single_data_point,
     )
     if args.image_size is None:
@@ -111,7 +109,6 @@ def create_argparser():
         fp16_scale_growth=1e-3,
         resume_id='',  # set this to a previous run's wandb id to resume training
         sample_interval=50000,
-        max_data_value=5.6,
         single_data_point=False,
     )
     defaults.update(model_and_diffusion_defaults())

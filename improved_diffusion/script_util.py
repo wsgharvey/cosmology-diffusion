@@ -36,6 +36,7 @@ def model_and_diffusion_defaults():
         use_checkpoint=False,
         use_scale_shift_norm=True,
         wraparound_pad=True,
+        image_conditional=True,
     )
 
 
@@ -61,6 +62,7 @@ def create_model_and_diffusion(
     use_checkpoint,
     use_scale_shift_norm,
     wraparound_pad,
+    image_conditional,
 ):
     model = create_model(
         image_size,
@@ -76,6 +78,7 @@ def create_model_and_diffusion(
         use_scale_shift_norm=use_scale_shift_norm,
         dropout=dropout,
         wraparound_pad=wraparound_pad,
+        image_conditional=image_conditional,
     )
     diffusion = create_gaussian_diffusion(
         steps=diffusion_steps,
@@ -105,6 +108,7 @@ def create_model(
     use_scale_shift_norm,
     dropout,
     wraparound_pad,
+    image_conditional,
 ):
     if image_size == 256:
         channel_mult = (1, 1, 2, 2, 4, 4)
@@ -135,6 +139,7 @@ def create_model(
         num_heads_upsample=num_heads_upsample,
         use_scale_shift_norm=use_scale_shift_norm,
         wraparound_pad=wraparound_pad,
+        image_conditional=image_conditional,
     )
 
 

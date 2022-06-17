@@ -15,31 +15,20 @@ files = [
     ('Data_001_density.dat', 1/4, 3., 0.31884106654994515),
     ('Data_000_density.dat', 1/5, 4., 0.25588245948185767),
 ]
+start_file = 'start_density.dat'
 
 
-def expand_channels(img, image_channels, max_val):
-    if image_channels == 1:
-        return img
-    elif image_channels == 2:
-        c1 = img.clamp(min=-1, max=1)
-        c2 = img.clamp(min=1, max=max_val)
-        c2 = (c2-1) / (max_val-1) * 2 - 1  # normalise to [-1, 1]
-        return th.cat([c1, c2], dim=0)
-    else:
-        raise ValueError("image_channels must be 1 or 2")
+def load_data(data_path, batch_size, single_data_point=False, deterministic=False):
 
-
-def load_data(data_path, batch_size, image_channels, max_data_value, single_data_point=False, deterministic=False):
-
-    def load_data(fname):
+    def load_data(fname, normalize=True):
         array = np.loadtxt(os.path.join(data_path, fname)).astype(np.float32)
         image_size_cubed = len(array[:, 3])
         image_size = int(np.cbrt(image_size_cubed))
         array = array[:, 3].reshape((image_size, image_size, image_size))
-        array = -1 + np.log(2 + array)
-        assert max_data_value >= array.max()
-        return array
-    all_data = [(load_data(path), a, z, g) for path, a, z, g, in files]
+        return -1 + np.log(2 + array) if normalize else array
+    all_data = [(load_data(fname), a, z, g) for fname, a, z, g, in files]
+    start_data = load_data(start_file, normalize=False)
+    start_data = (start_data - start_data.mean()) / start_data.std()
     batch = []
     ys = []
     while True:
@@ -53,29 +42,17 @@ def load_data(data_path, batch_size, image_channels, max_data_value, single_data
         rotation = np.random.randint(0, 4)
         if single_data_point:
             slice_i = slice_dim = flip = rotation = 0
-        img = data.take(indices=slice_i, axis=slice_dim)
-        if flip:
-            img = img[::-1, :]
-        img = np.rot90(img, k=rotation)
-        img = th.tensor(img.copy()).view(1, image_size, image_size)
-        img = expand_channels(img, image_channels, max_data_value)
+        def get_slice(array, slice_i, slice_dim, flip, rotation):
+            img = array.take(indices=slice_i, axis=slice_dim)
+            if flip:
+                img = img[::-1, :]
+            img = np.rot90(img, k=rotation)
+            return th.tensor(img.copy()).view(1, image_size, image_size)
+        img = get_slice(data, slice_i, slice_dim, flip, rotation)
+        start = get_slice(start_data, slice_i, slice_dim, flip, rotation)
         batch.append(img)
-        ys.append(g)
+        ys.append({'y': th.tensor(g).view(1), 'image_cond': start})
         if len(batch) == batch_size:
-            yield th.stack(batch), {'y': th.tensor(ys).view(-1, 1)}
+            yield th.stack(batch), {k: th.stack([y[k] for y in ys]) for k in ys[0]}
             batch = []
             ys = []
-
-
-def collapse_two_channel(t, max_data_value):
-    """ map Bx2xHxW to Bx1xHxW in range [-1, inf]
-    """
-    # clamp to valid range
-    c1 = t[:, 0:1].clamp(min=-1, max=1)
-    c2 = t[:, 1:2].clamp(min=-1, max=1)
-    # impose additional constraint that one of c1 and c2 is at clamped region
-    d1 = (1-c1).abs()
-    d2 = (-1-c2).abs()
-    c1[d1 < d2] = 1
-    c2[d1 >= d2] = -1
-    return c1 + (1 + c2) * (max_data_value - 1) / 2
