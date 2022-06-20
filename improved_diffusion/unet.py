@@ -316,6 +316,7 @@ class UNetModel(nn.Module):
         use_scale_shift_norm=False,
         wraparound_pad=False,
         image_conditional=False,
+        use_attention=True,
     ):
         super().__init__()
 
@@ -335,6 +336,7 @@ class UNetModel(nn.Module):
         self.num_heads = num_heads
         self.num_heads_upsample = num_heads_upsample
         self.image_conditional = image_conditional
+        self.use_attention = use_attention
 
         time_embed_dim = model_channels * 4
         self.time_embed = nn.Sequential(
@@ -376,7 +378,7 @@ class UNetModel(nn.Module):
                     )
                 ]
                 ch = mult * model_channels
-                if ds in attention_resolutions:
+                if ds in attention_resolutions and self.use_attention:
                     layers.append(
                         AttentionBlock(
                             ch, use_checkpoint=use_checkpoint, num_heads=num_heads, wraparound_pad=wraparound_pad,
@@ -402,7 +404,7 @@ class UNetModel(nn.Module):
                 use_conv=False,
                 wraparound_pad=wraparound_pad,
             ),
-            AttentionBlock(ch, use_checkpoint=use_checkpoint, num_heads=num_heads, wraparound_pad=wraparound_pad,),
+            AttentionBlock(ch, use_checkpoint=use_checkpoint, num_heads=num_heads, wraparound_pad=wraparound_pad,) if self.use_attention else nn.Identity(),
             ResBlock(
                 ch,
                 time_embed_dim,
@@ -432,7 +434,7 @@ class UNetModel(nn.Module):
                     )
                 ]
                 ch = model_channels * mult
-                if ds in attention_resolutions:
+                if ds in attention_resolutions and self.use_attention:
                     layers.append(
                         AttentionBlock(
                             ch,
