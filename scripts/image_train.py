@@ -59,6 +59,7 @@ def main():
         data_path=args.data_path,
         batch_size=args.batch_size,
         single_data_point=args.single_data_point,
+        density_3D=args.density_3D, # MEAD: Added
     )
     if args.image_size is None:
         args.image_size = next(data)[0].shape[-1]

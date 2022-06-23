@@ -53,11 +53,10 @@ class Upsample(nn.Module):
 
     :param channels: channels in the inputs and outputs.
     :param use_conv: a bool determining if a convolution is applied.
-    :param dims: determines if the signal is 1D, 2D, or 3D. If 3D, then
-                 upsampling occurs in the inner-two dimensions.
+    :param dims: determines if the signal is 1D, 2D, or 3D.
     """
 
-    def __init__(self, channels, use_conv, dims=2, wraparound_pad=False):
+    def __init__(self, channels, use_conv, dims, wraparound_pad=False): # MEAD: dims=2 no longer default
         super().__init__()
         self.channels = channels
         self.use_conv = use_conv
@@ -67,12 +66,12 @@ class Upsample(nn.Module):
 
     def forward(self, x):
         assert x.shape[1] == self.channels
-        if self.dims == 3:
-            x = F.interpolate(
-                x, (x.shape[2], x.shape[3] * 2, x.shape[4] * 2), mode="nearest"
-            )
-        else:
-            x = F.interpolate(x, scale_factor=2, mode="nearest")
+        #if self.dims == 3: # MEAD: Commented out
+        #    x = F.interpolate(
+        #        x, (x.shape[2], x.shape[3] * 2, x.shape[4] * 2), mode="nearest"
+        #    )
+        #else:
+        x = F.interpolate(x, scale_factor=2, mode="nearest")
         if self.use_conv:
             x = self.conv(x)
         return x
@@ -84,16 +83,15 @@ class Downsample(nn.Module):
 
     :param channels: channels in the inputs and outputs.
     :param use_conv: a bool determining if a convolution is applied.
-    :param dims: determines if the signal is 1D, 2D, or 3D. If 3D, then
-                 downsampling occurs in the inner-two dimensions.
+    :param dims: determines if the signal is 1D, 2D, or 3D.
     """
 
-    def __init__(self, channels, use_conv, dims=2, wraparound_pad=False):
+    def __init__(self, channels, use_conv, dims, wraparound_pad=False): # MEAD: Default dims no longer 2
         super().__init__()
         self.channels = channels
         self.use_conv = use_conv
         self.dims = dims
-        stride = 2 if dims != 3 else (1, 2, 2)
+        stride = 2# if dims != 3 else (1, 2, 2) # MEAD: Commented out (or set stride=2 as default below)
         if use_conv:
             self.op = conv_nd(dims, channels, channels, 3, stride=stride, padding=1, wraparound_pad=wraparound_pad)
         else:
@@ -308,7 +306,6 @@ class UNetModel(nn.Module):
         dropout=0,
         channel_mult=(1, 2, 4, 8),
         conv_resample=True,
-        dims=2,
         cond_dim=0,
         use_checkpoint=False,
         num_heads=1,
@@ -317,6 +314,7 @@ class UNetModel(nn.Module):
         wraparound_pad=False,
         image_conditional=False,
         use_attention=True,
+        density_3D=False,
     ):
         super().__init__()
 
@@ -337,6 +335,7 @@ class UNetModel(nn.Module):
         self.num_heads_upsample = num_heads_upsample
         self.image_conditional = image_conditional
         self.use_attention = use_attention
+        self.density_3D = density_3D
 
         time_embed_dim = model_channels * 4
         self.time_embed = nn.Sequential(
@@ -352,6 +351,7 @@ class UNetModel(nn.Module):
                 linear(time_embed_dim, time_embed_dim),
             )
 
+        dims = 3 if self.density_3D else 2 # MEAD: Added this
         self.input_blocks = nn.ModuleList(
             [
                 TimestepEmbedSequential(

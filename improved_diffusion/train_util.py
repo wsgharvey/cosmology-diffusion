@@ -340,6 +340,7 @@ class TrainLoop:
     @rng_decorator(seed=0)
     def log_samples(self):
         if dist.get_rank() == 0:
+
             sample_start = time()
             self.model.eval()
             orig_state_dict = copy.deepcopy(self.model.state_dict())
@@ -352,13 +353,16 @@ class TrainLoop:
             model_kwargs = {k: v[:n_conds].repeat_interleave(2, dim=0).to(dist_util.dev()) for k, v in model_kwargs.items()}
             samples = self.diffusion.p_sample_loop(
                 self.model,
-                (self.args.batch_size, self.args.image_channels, self.args.image_size, self.args.image_size),
+                (self.args.batch_size, self.args.image_channels, *[self.args.image_size]*(3 if self.args.density_3D else 2)), # MEAD: Added
                 model_kwargs=model_kwargs,
                 clip_denoised=False,
             )
-            samples = (samples + 1) * 255/(1+samples.max())
+            samples = (samples + 1) * 255/(1+samples.max()) # MEAD: Added below
+            concat_slices = lambda t: concat_images_with_padding([t[:, :, i] for i in (0, 1, 10, 20)], horizontal=False) if self.args.density_3D else t
+            samples = concat_slices(samples) # MEAD: Added
             if self.args.image_conditional:
                 image_cond = 1 + 255/2 * model_kwargs['image_cond']/2  # scale unit Gaussian to roughly fit in [0, 255]
+                image_cond = concat_slices(image_cond) # MEAD: Added
                 samples = concat_images_with_padding([image_cond, samples], pad_val=0, horizontal=False, pad_dim=2)
             samples = concat_images_with_padding(samples, pad_val=0, pad_dim=2)
             img = wandb.Image(Image.fromarray(samples.clamp(0, 255).contiguous().cpu().numpy().astype(np.uint8).squeeze(axis=0)),

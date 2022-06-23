@@ -38,6 +38,7 @@ def model_and_diffusion_defaults():
         wraparound_pad=True,
         image_conditional=True,
         use_attention=True,
+        density_3D=False, # MEAD: Added
     )
 
 
@@ -65,6 +66,7 @@ def create_model_and_diffusion(
     wraparound_pad,
     image_conditional,
     use_attention,
+    density_3D, # MEAD: Added
 ):
     model = create_model(
         image_size,
@@ -82,6 +84,7 @@ def create_model_and_diffusion(
         wraparound_pad=wraparound_pad,
         image_conditional=image_conditional,
         use_attention=use_attention,
+        density_3D=density_3D, # MEAD: Added
     )
     diffusion = create_gaussian_diffusion(
         steps=diffusion_steps,
@@ -113,6 +116,7 @@ def create_model(
     wraparound_pad,
     image_conditional,
     use_attention,
+    density_3D, # MEAD: Added
 ):
     if image_size == 256:
         channel_mult = (1, 1, 2, 2, 4, 4)
@@ -145,6 +149,7 @@ def create_model(
         wraparound_pad=wraparound_pad,
         image_conditional=image_conditional,
         use_attention=use_attention,
+        density_3D=density_3D, # MEAD: Added
     )
 
 
