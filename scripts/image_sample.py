@@ -18,6 +18,7 @@ from improved_diffusion.script_util import (
     str2bool,
 )
 from improved_diffusion.test_util import get_model_results_path, Protect
+from improved_diffusion.image_datasets import load_data
 
 
 def main(model, diffusion, data, args):
@@ -28,7 +29,6 @@ def main(model, diffusion, data, args):
     print("sampling...")
     saved = 0
     while saved < args.n_samples:
-        model_kwargs = {}
         samples, model_kwargs = diffusion.get_example_samples_kwargs(model, data, args, dev=dist_util.dev(), use_ddim=args.use_ddim)
         samples = samples.contiguous().cpu().numpy()
         for img in samples:
@@ -71,8 +71,10 @@ if __name__ == "__main__":
     model.load_state_dict(state_dict)
     model = model.to(args.device)
     model.eval()
-    args.image_size = model_args.image_size
-    args.image_channels = model_args.image_channels
+    #args.image_size = model_args.image_size
+    #args.image_channels = model_args.image_channels
+    for k, v in args.__dict__.items():
+        model_args[k] = v
 
     # write config dictionary to the results directory
     json_path = args.eval_dir / "model_config.json"
@@ -82,4 +84,11 @@ if __name__ == "__main__":
                 json.dump(vars(model_args), f, indent=4)
         print(f"Saved model config at {json_path}")
 
-    main(model, args)
+    # load dataset
+    data = load_data(
+        batch_size=model_args.batch_size,
+        data_path=model_args.data_path,
+        density_3D=model_args.density_3D,
+        single_data_point=model_args.single_data_point,
+    )
+    main(model, diffusion, data, model_args)
