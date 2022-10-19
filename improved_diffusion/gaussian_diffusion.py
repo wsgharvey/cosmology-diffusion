@@ -395,7 +395,7 @@ class GaussianDiffusion:
         sample_fn = self.ddim_sample_loop if use_ddim else self.p_sample_loop
         samples = sample_fn(
             model,
-            (args.batch_size, args.image_channels, *[args.image_size]*(3 if args.density_3D else 2)),
+            (2*n_conds, args.image_channels, *[args.image_size]*(3 if args.density_3D else 2)),
             model_kwargs=model_kwargs,
             clip_denoised=False,
         )
