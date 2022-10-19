@@ -74,7 +74,7 @@ if __name__ == "__main__":
     #args.image_size = model_args.image_size
     #args.image_channels = model_args.image_channels
     for k, v in args.__dict__.items():
-        model_args[k] = v
+        model_args.__dict__[k] = v
 
     # write config dictionary to the results directory
     json_path = args.eval_dir / "model_config.json"

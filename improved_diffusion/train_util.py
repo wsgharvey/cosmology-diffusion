@@ -353,8 +353,10 @@ class TrainLoop:
                 image_cond = 1 + 255/2 * model_kwargs['image_cond']/2  # scale unit Gaussian to roughly fit in [0, 255]
                 assert not self.density_3D  # TODO: support image conditional with density 3D
                 samples = concat_images_with_padding([image_cond, samples], pad_val=0, horizontal=False, pad_dim=2)
+            print(samples.shape)
             samples = concat_images_with_padding(samples, pad_val=0, pad_dim=2)
-            img = wandb.Image(Image.fromarray(samples.clamp(0, 255).contiguous().cpu().numpy().astype(np.uint8).squeeze(axis=0)),
+            print(samples.shape)
+            img = wandb.Image(Image.fromarray(samples.clamp(0, 255).contiguous().cpu().numpy().astype(np.uint8)),
                               caption=str(model_kwargs["y"].flatten().cpu().numpy()))
             logger.logkv("samples/all", img, distributed=False)
             logger.logkv("timing/sampling_time", time() - sample_start, distributed=False)
