@@ -71,11 +71,6 @@ if __name__ == "__main__":
     model.load_state_dict(state_dict)
     model = model.to(args.device)
     model.eval()
-    #args.image_size = model_args.image_size
-    #args.image_channels = model_args.image_channels
-    for k, v in args.__dict__.items():
-        model_args.__dict__[k] = v
-
     # write config dictionary to the results directory
     json_path = args.eval_dir / "model_config.json"
     if not json_path.exists():
@@ -83,12 +78,15 @@ if __name__ == "__main__":
             with open(json_path, "w") as f:
                 json.dump(vars(model_args), f, indent=4)
         print(f"Saved model config at {json_path}")
+    for k, v in model_args.__dict__.items():
+        if k not in args:
+            args.__dict__[k] = v
 
     # load dataset
     data = load_data(
-        batch_size=model_args.batch_size,
-        data_path=model_args.data_path,
-        density_3D=model_args.density_3D,
-        single_data_point=model_args.single_data_point,
+        batch_size=args.batch_size,
+        data_path=args.data_path,
+        density_3D=args.density_3D,
+        single_data_point=args.single_data_point,
     )
-    main(model, diffusion, data, model_args)
+    main(model, diffusion, data, args)
