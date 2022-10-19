@@ -27,6 +27,7 @@ from .fp16_util import (
 from .nn import update_ema
 from .resample import LossAwareSampler, UniformSampler
 from .rng_util import rng_decorator
+from .utils import concat_images_with_padding
 
 # For ImageNet experiments, this was a good default value.
 # We found that the lg_loss_scale quickly climbed to
@@ -347,19 +348,7 @@ class TrainLoop:
             self.model.load_state_dict(copy.deepcopy(self._master_params_to_state_dict(self.ema_params[0])))
 
             print("sampling...")
-            #y = th.tensor([1.0, 0.773, 0.256, 0.9]*self.args.batch_size)[:self.args.batch_size].view(-1, 1)
-            _, model_kwargs = next(self.data)
-            n_conds = math.ceil(self.args.batch_size/2)
-            model_kwargs = {k: v[:n_conds].repeat_interleave(2, dim=0).to(dist_util.dev()) for k, v in model_kwargs.items()}
-            samples = self.diffusion.p_sample_loop(
-                self.model,
-                (self.args.batch_size, self.args.image_channels, *[self.args.image_size]*(3 if self.args.density_3D else 2)), # MEAD: Added
-                model_kwargs=model_kwargs,
-                clip_denoised=False,
-            )
-            samples = (samples + 1) * 255/(1+samples.max()) # MEAD: Added below
-            concat_slices = lambda t: concat_images_with_padding([t[:, :, i] for i in (0, 1, 10, 20)], horizontal=False) if self.args.density_3D else t
-            samples = concat_slices(samples) # MEAD: Added
+            samples, model_kwargs = self.diffusion.get_example_samples_kwargs(self.model, self.data, self.args, dev=dist_util.dev())
             if self.args.image_conditional:
                 image_cond = 1 + 255/2 * model_kwargs['image_cond']/2  # scale unit Gaussian to roughly fit in [0, 255]
                 image_cond = concat_slices(image_cond) # MEAD: Added
@@ -426,20 +415,3 @@ def log_loss_dict(diffusion, ts, losses):
         for sub_t, sub_loss in zip(ts.cpu().numpy(), values.detach().cpu().numpy()):
             quartile = int(4 * sub_t / diffusion.num_timesteps)
             logger.logkv_mean(f"{key}_q{quartile}", sub_loss)
-
-
-def concat_images_with_padding(images, horizontal=True,
-                               pad_dim=1, pad_val=0, pad_ends=False):
-    """Cocatenates a list (or batched tensor) of CxHxW images, with padding in
-    between, for pretty viewing.
-    """
-    *_, h, w = images[0].shape
-    pad_h, pad_w = (h, pad_dim) if horizontal else (pad_dim, w)
-    padding = th.zeros_like(images[0][..., :pad_h, :pad_w]) + pad_val
-    images_with_padding = []
-    for image in images:
-        images_with_padding.extend([image, padding])
-    if pad_ends:
-        images_with_padding = [padding, *images_with_padding, padding]
-    images_with_padding = images_with_padding[:-1]   # remove final pad
-    return th.cat(images_with_padding, dim=-1 if horizontal else -2)

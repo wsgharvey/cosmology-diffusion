@@ -13,6 +13,7 @@ import torch as th
 
 from .nn import mean_flat
 from .losses import normal_kl, discretized_gaussian_log_likelihood
+from .utils import concat_images_with_padding
 
 
 def get_named_beta_schedule(schedule_name, num_diffusion_timesteps):
@@ -385,6 +386,24 @@ class GaussianDiffusion:
         )  # no noise when t == 0
         sample = out["mean"] + nonzero_mask * th.exp(0.5 * out["log_variance"]) * noise
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
+
+
+    def get_example_samples_kwargs(self, model, data, args, dev, use_ddim=False):
+        _, model_kwargs = next(data)
+        n_conds = math.ceil(args.batch_size/2)
+        model_kwargs = {k: v[:n_conds].repeat_interleave(2, dim=0).to(dev) for k, v in model_kwargs.items()}
+        sample_fn = self.ddim_sample_loop if use_ddim else self.p_sample_loop
+        samples = sample_fn(
+            model,
+            (args.batch_size, args.image_channels, *[args.image_size]*(3 if args.density_3D else 2)),
+            model_kwargs=model_kwargs,
+            clip_denoised=False,
+        )
+        samples_max = 5
+        samples = (samples + 1) * 255/(samples_max) # MEAD: Added below
+        concat_slices = lambda t: concat_images_with_padding([t[:, :, i] for i in (0, 1, 10, 20)], horizontal=False) if args.density_3D else t
+        return concat_slices(samples) # MEAD: Added
+
 
     def p_sample_loop(
         self,

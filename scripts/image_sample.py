@@ -20,7 +20,7 @@ from improved_diffusion.script_util import (
 from improved_diffusion.test_util import get_model_results_path, Protect
 
 
-def main(model, args):
+def main(model, diffusion, data, args):
 
     def fname(saved):
         return args.eval_dir / "samples" / f"sample-{saved:06d}.npy"
@@ -29,18 +29,9 @@ def main(model, args):
     saved = 0
     while saved < args.n_samples:
         model_kwargs = {}
-        sample_fn = (
-            diffusion.p_sample_loop if not args.use_ddim else diffusion.ddim_sample_loop
-        )
-        sample = sample_fn(
-            model,
-            (args.batch_size, args.image_channels, args.image_size, args.image_size),
-            clip_denoised=args.clip_denoised,
-            model_kwargs=model_kwargs,
-        )
-        sample = sample.squeeze(dim=1).contiguous()
-
-        for img in sample.cpu().numpy():
+        samples, model_kwargs = diffusion.get_example_samples_kwargs(model, data, args, dev=dist_util.dev(), use_ddim=args.use_ddim)
+        samples = samples.contiguous().cpu().numpy()
+        for img in samples:
             np.save(fname(saved), img)
             while os.path.exists(fname(saved)):
                 saved += 1
