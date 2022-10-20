@@ -399,10 +399,11 @@ class GaussianDiffusion:
             model_kwargs=model_kwargs,
             clip_denoised=False,
         )
-        samples_max = 5
-        samples = (samples + 1) * 255/(samples_max) # MEAD: Added below
-        concat_slices = lambda t: concat_images_with_padding([t[:, :, i] for i in (0, 1, 10, 20)], horizontal=False) if args.density_3D else t
-        return concat_slices(samples) # MEAD: Added
+        # samples_max = 5
+        # samples = (samples + 1) * 255/(samples_max) # MEAD: Added below
+        # concat_slices = lambda t: concat_images_with_padding([t[:, :, i] for i in (0, 1, 10, 20)], horizontal=False) if args.density_3D else t
+        # samples = concat_slices(samples) # MEAD: Added
+        return samples
 
 
     def p_sample_loop(

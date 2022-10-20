@@ -349,6 +349,10 @@ class TrainLoop:
 
             print("sampling...")
             samples, model_kwargs = self.diffusion.get_example_samples_kwargs(self.model, self.data, self.args, dev=dist_util.dev())
+            samples_max = 5
+            samples = (samples + 1) * 255/(samples_max) # MEAD: Added below
+            concat_slices = lambda t: concat_images_with_padding([t[:, :, i] for i in (0, 1, 10, 20)], horizontal=False) if self.density_3D else t
+            samples = concat_slices(samples) # MEAD: Added
             if self.args.image_conditional:
                 image_cond = 1 + 255/2 * model_kwargs['image_cond']/2  # scale unit Gaussian to roughly fit in [0, 255]
                 assert not self.density_3D  # TODO: support image conditional with density 3D

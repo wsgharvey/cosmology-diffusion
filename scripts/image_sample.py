@@ -31,8 +31,9 @@ def main(model, diffusion, data, args):
     while saved < args.n_samples:
         samples, model_kwargs = diffusion.get_example_samples_kwargs(model, data, args, dev=dist_util.dev(), use_ddim=args.use_ddim)
         samples = samples.contiguous().cpu().numpy()
-        for img in samples:
-            np.save(fname(saved), img)
+        for sample in samples:
+            print(sample.shape)
+            np.save(fname(saved), sample)
             while os.path.exists(fname(saved)):
                 saved += 1
 
