@@ -9,7 +9,7 @@ import argparse
 import pickle
 import torch as th
 
-from .image_sample import kwargs_fname
+from image_sample import kwargs_fname
 
 
 if __name__ == "__main__":
