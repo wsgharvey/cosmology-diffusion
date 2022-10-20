@@ -6,6 +6,7 @@ numpy array. This can be used to produce samples for FID evaluation.
 import argparse
 import os
 import json
+import pickle
 
 import numpy as np
 import torch as th
@@ -31,9 +32,11 @@ def main(model, diffusion, data, args):
     while saved < args.n_samples:
         samples, model_kwargs = diffusion.get_example_samples_kwargs(model, data, args, dev=dist_util.dev(), use_ddim=args.use_ddim)
         samples = samples.contiguous().cpu().numpy()
-        for sample in samples:
+        for i, sample in enumerate(samples):
             print(sample.shape)
             np.save(fname(saved), sample)
+            item_kwargs = {k: v[i] for k, v in model_kwargs.items()}
+            pickle.dump(item_kwargs, open(fname(saved).replace(".npy", "_kwargs.pkl"), "wb"))
             while os.path.exists(fname(saved)):
                 saved += 1
 
