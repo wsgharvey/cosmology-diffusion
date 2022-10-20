@@ -41,7 +41,7 @@ def main(model, diffusion, data, args):
                 saved += 1
             np.save(fname(saved), sample)
             item_kwargs = {k: v[i] for k, v in model_kwargs.items()}
-            pickle.dump(item_kwargs, open(kwargs_fname(saved)), "wb"))
+            pickle.dump(item_kwargs, open(kwargs_fname(saved), "wb"))
 
     print("sampling complete")
 
