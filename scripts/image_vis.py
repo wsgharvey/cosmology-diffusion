@@ -29,8 +29,8 @@ if __name__ == "__main__":
     with open(model_config_path, "r") as f:
         model_args = argparse.Namespace(**json.load(f))
 
-    overdensities = samples
-    densities = np.exp(1 + samples) - 1  # densities in range [0, inf]
+    overdensities = samples.squeeze(dim=1)
+    densities = np.exp(1 + overdensities) - 1  # densities in range [0, inf]
 
     model_kwargses = [pickle.load(open(kwargs_fname(f), 'rb')) for f in files]
     model_kwargses = [{k: v.detach().cpu().numpy() for k, v in m.items()} for m in model_kwargses]
