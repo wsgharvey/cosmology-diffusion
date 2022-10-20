@@ -33,12 +33,11 @@ def main(model, diffusion, data, args):
         samples, model_kwargs = diffusion.get_example_samples_kwargs(model, data, args, dev=dist_util.dev(), use_ddim=args.use_ddim)
         samples = samples.contiguous().cpu().numpy()
         for i, sample in enumerate(samples):
-            print(sample.shape)
-            np.save(fname(saved), sample)
-            item_kwargs = {k: v[i] for k, v in model_kwargs.items()}
-            pickle.dump(item_kwargs, open(fname(saved).replace(".npy", "_kwargs.pkl"), "wb"))
             while os.path.exists(fname(saved)):
                 saved += 1
+            np.save(fname(saved), sample)
+            item_kwargs = {k: v[i] for k, v in model_kwargs.items()}
+            pickle.dump(item_kwargs, open(str(fname(saved)).replace(".npy", "_kwargs.pkl"), "wb"))
 
     print("sampling complete")
 
