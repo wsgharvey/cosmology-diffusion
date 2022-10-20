@@ -39,13 +39,13 @@ if __name__ == "__main__":
     for sample_i, (sample, model_kwargs) in enumerate(zip(overdensities, model_kwargses)):
         D =  sample.shape[-1]
         indices = [0, 1, 2, 3, 4] + [D//2, D//2+1, D//2+2, D//2+3, D//2+4]
-        fig, axes = plt.subplots(ncols=D, figsize=(D*2, 2))
+        fig, axes = plt.subplots(ncols=len(indices), figsize=(len(indices)*2, 2))
         axes[0].set_ylabel(model_kwargs['y'].item())
         for ind, ax in zip(indices, axes):
-            im = ax.imshow(sample[ind], cmap='gray')
+            print(sample[ind].shape)
+            im = ax.imshow(sample[ind], cmap='gist_heat', vmin=-1, vmax=max_density)
             ax.set_title(str(ind))
             ax.axis('off')
-            ax.set_ylim(-1, max_density)
 
         fig.subplots_adjust(right=0.8)
         cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
