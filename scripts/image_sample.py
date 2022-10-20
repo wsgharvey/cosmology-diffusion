@@ -22,11 +22,15 @@ from improved_diffusion.test_util import get_model_results_path, Protect
 from improved_diffusion.image_datasets import load_data
 
 
+def fname(saved):
+    return args.eval_dir / "samples" / f"sample-{saved:06d}.npy"
+
+
+def kwargs_fname(fnam):
+    return str(fnam).replace(".npy", "_kwargs.pkl")
+
+
 def main(model, diffusion, data, args):
-
-    def fname(saved):
-        return args.eval_dir / "samples" / f"sample-{saved:06d}.npy"
-
     print("sampling...")
     saved = 0
     while saved < args.n_samples:
@@ -37,7 +41,7 @@ def main(model, diffusion, data, args):
                 saved += 1
             np.save(fname(saved), sample)
             item_kwargs = {k: v[i] for k, v in model_kwargs.items()}
-            pickle.dump(item_kwargs, open(str(fname(saved)).replace(".npy", "_kwargs.pkl"), "wb"))
+            pickle.dump(item_kwargs, open(kwargs_fname(saved)), "wb"))
 
     print("sampling complete")
 
