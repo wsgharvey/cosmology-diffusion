@@ -8,6 +8,7 @@ from collections import defaultdict
 import argparse
 import pickle
 import torch as th
+import matplotlib.pyplot as plt
 
 from image_sample import kwargs_fname
 
@@ -28,15 +29,24 @@ if __name__ == "__main__":
     with open(model_config_path, "r") as f:
         model_args = argparse.Namespace(**json.load(f))
 
+    overdensities = samples
     densities = np.exp(1 + samples) - 1  # densities in range [0, inf]
 
-    normed = densities
+    model_kwargses = [pickle.load(open(kwargs_fname(f), 'rb')) for f in files]
+    model_kwargses = [{k: v.detach().cpu().numpy() for k, v in m.items()} for m in model_kwargses]
 
-    model_kwargs = [pickle.load(open(kwargs_fname(f), 'rb')) for f in files]
-    model_kwargs = {k: th.stack([m[k] for m in model_kwargs]) for k in model_kwargs[0].keys()}
-    model_kwargs = {k: v.detach().cpu().numpy() for k, v in model_kwargs.items()}
+    for sample_i, (sample, model_kwargs) in enumerate(zip(overdensities, model_kwargses)):
+        D =  sample.shape[-1]
+        indices = [0, 1, 2, 3, 4] + [D, D+1, D+2, D+3, D+4]
+        fig, axes = plt.subplots(ncols=D, figsize=(D*2, 2))
+        axes[0].set_ylabel(model_kwargs['y'].item())
+        for ind, ax in zip(indices, axes):
+            im = ax.imshow(sample[ind], cmap='gray')
+            ax.set_title(str(ind))
+            ax.axis('off')
+            ax.set_ylim(-1, 5)
 
-    print(samples[0].shape, samples[0].min(), samples[0].max())
-    print(model_kwargs['y'])
-
-    # fig.savefig(Path(args.eval_dir) / f"density-histogram-{args.n_samples}.pdf", bbox_inches='tight')
+        fig.subplots_adjust(right=0.8)
+        cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+        fig.colorbar(im, cax=cbar_ax)
+        fig.savefig(f"sample_{sample_i}.png")
